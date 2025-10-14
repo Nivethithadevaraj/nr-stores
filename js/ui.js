@@ -113,42 +113,6 @@ function renderProducts(products) {
   });
 }
 
-// --- Cart ---
-async function showCart() {
-  const email = localStorage.getItem("email");
-  const uid = email.replace(/[@.]/g, "_");
-
-  const cartDocs = await getCollection("cart");
-  const allProducts = await getCollection("products");
-
-  const myCart = cartDocs.filter(c => c.fields.user.stringValue === uid);
-  const cartProducts = allProducts.filter(p =>
-    myCart.some(c => c.fields.productId.stringValue === p.name.split("/").pop())
-  );
-
-  const grid = document.getElementById("productGrid");
-  grid.innerHTML = `<h2>Your Cart</h2>`;
-  renderProducts(cartProducts);
-}
-
-// --- Wishlist ---
-async function showWishlist() {
-  const email = localStorage.getItem("email");
-  const uid = email.replace(/[@.]/g, "_");
-
-  const wishDocs = await getCollection("wishlist");
-  const allProducts = await getCollection("products");
-
-  const myWishlist = wishDocs.filter(w => w.fields.user.stringValue === uid);
-  const wishProducts = allProducts.filter(p =>
-    myWishlist.some(w => w.fields.productId.stringValue === p.name.split("/").pop())
-  );
-
-  const grid = document.getElementById("productGrid");
-  grid.innerHTML = `<h2>Your Wishlist</h2>`;
-  renderProducts(wishProducts);
-}
-
 // --- Add to Cart ---
 async function addToCart(p) {
   const uid = localStorage.getItem("email").replace(/[@.]/g, "_");
@@ -174,3 +138,83 @@ async function addToWishlist(p) {
   });
   alert("❤️ Added to wishlist");
 }
+
+// ✅ --- CART / WISHLIST / HOME FIX ---
+
+// show all products (home)
+async function showHome() {
+  const products = await getCollection("products");
+  renderProducts(products);
+
+  const categories = await getCollection("categories");
+  const subcategories = await getCollection("subcategories");
+  renderCategories(categories, subcategories, products);
+}
+
+// ===== SHOW CART =====
+async function showCart() {
+  const email = localStorage.getItem("email");
+  const idToken = localStorage.getItem("idToken");
+  if (!email || !idToken) return alert("Please login again");
+
+  const uid = email.replace(/[@.]/g, "_");
+  const cartDocs = (await getCollection("cart")) || [];
+  const allProducts = (await getCollection("products")) || [];
+
+  const myCart = cartDocs.filter(c => c?.fields?.user?.stringValue === uid);
+
+  const cartProducts = allProducts.filter(p => {
+    const pid = p?.name?.split("/").pop();
+    return myCart.some(c => c?.fields?.productId?.stringValue === pid);
+  });
+
+  const grid = document.getElementById("productGrid");
+  grid.innerHTML = `<h2>Your Cart</h2>`;
+  renderProducts(cartProducts);
+
+  const categories = await getCollection("categories");
+  const subcategories = await getCollection("subcategories");
+  renderCategories(categories, subcategories, allProducts);
+}
+
+// ===== SHOW WISHLIST (safe version) =====
+async function showWishlist() {
+  const email = localStorage.getItem("email");
+  const idToken = localStorage.getItem("idToken");
+  if (!email || !idToken) return alert("Please login again");
+
+  const uid = email.replace(/[@.]/g, "_");
+  const wishDocs = (await getCollection("wishlist")) || [];
+  const allProducts = (await getCollection("products")) || [];
+
+  const myWishlist = wishDocs.filter(
+    w => w?.fields && w.fields.user?.stringValue === uid
+  );
+
+  const wishProductIds = myWishlist
+    .map(w => w?.fields?.productId?.stringValue)
+    .filter(id => !!id);
+
+  const wishProducts = allProducts.filter(p =>
+    wishProductIds.includes(p.name.split("/").pop())
+  );
+
+  const grid = document.getElementById("productGrid");
+  grid.innerHTML = `<h2>Your Wishlist</h2>`;
+  renderProducts(wishProducts);
+
+  const categories = await getCollection("categories");
+  const subcategories = await getCollection("subcategories");
+  renderCategories(categories, subcategories, allProducts);
+}
+
+// --- Connect header buttons ---
+document.addEventListener("DOMContentLoaded", () => {
+  const cartBtn = document.getElementById("cartBtn");
+  const wishBtn = document.getElementById("wishlistBtn");
+  const brand = document.querySelector(".brand");
+
+  if (cartBtn) cartBtn.onclick = showCart;
+  if (wishBtn) wishBtn.onclick = showWishlist;
+  if (brand) brand.onclick = showHome;
+});
