@@ -1,49 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <title>NR-Stores — Signup / Login</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NR-Stores</title>
   <link rel="stylesheet" href="style.css" />
+  <style>
+    .hidden {
+      display: none !important;
+    }
+    /* Optional: make logout closer to icons */
+    .icons button#logoutBtn {
+      margin-left: 8px;
+      padding: 6px 10px;
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <h2 id="formTitle">Sign Up</h2>
-
-    <div id="signupForm" class="form">
-      <label>Full Name</label>
-      <input type="text" id="signupName" placeholder="Your full name" />
-
-      <label>Email</label>
-      <input type="email" id="signupEmail" placeholder="email@example.com" />
-
-      <label>Password</label>
-      <input type="password" id="signupPassword" placeholder="Choose a password" />
-
-      <button id="signupBtn" onclick="signup()">SIGN UP</button>
-      <p class="switch">Already registered? <a href="#" onclick="switchForm('login')">Login</a></p>
-    </div>
-
-    <div id="loginForm" class="form hidden">
-      <label>Email</label>
-      <input type="email" id="loginEmail" placeholder="email@example.com" />
-
-      <label>Password</label>
-      <input type="password" id="loginPassword" placeholder="Your password" />
-
-      <button id="loginBtn" onclick="login()">LOGIN</button>
-      <p class="switch">New here? <a href="#" onclick="switchForm('signup')">Create account</a></p>
-    </div>
-<button id="googleLoginBtn" onclick="googleLogin()" class="google-btn">
-  <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo" />
-  Sign in with Google
-</button>
-
-    <div id="message" role="status"></div>
+  <!-- LOGIN / SIGNUP -->
+  <div id="authContainer" class="container">
+    <h2 id="formTitle">Login</h2>
+    <label>Email</label>
+    <input type="email" id="loginEmail" placeholder="email@example.com" />
+    <label>Password</label>
+    <input type="password" id="loginPassword" placeholder="Enter password" />
+    <button id="loginBtn" onclick="login()">LOGIN</button>
+    <h4>New here? <a href="#" onclick="switchForm('signup')">Create account</a></h4>
+    <button onclick="googleLogin()">Sign in with Google</button>
+    <div id="message"></div>
   </div>
-<script src="js/util.js"></script>
-<script src="js/firestore.js"></script>
-<script src="js/auth.js"></script>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
 
+  <!-- USER DASHBOARD (HIDDEN INITIALLY) -->
+  <div id="userDashboard" class="hidden">
+    <header class="main-header">
+      <div class="brand">NR-Stores</div>
+
+      <!-- search bar moved properly inside dashboard -->
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Search for products..." />
+        <button id="searchBtn">🔍</button>
+      </div>
+
+      <div class="icons">
+        <span id="cartBtn">🛒</span>
+        <span id="wishlistBtn">❤️</span>
+        <span id="profileBtn">🙎‍♀️</span>
+        <span id="logoutbtrn"><button id="logoutBtn" onclick="logout()">Logout</button></span>
+      </div>
+    </header>
+
+    <div class="body-container">
+      <aside class="sidebar" id="sidebar"></aside>
+      <main class="content">
+        <div id="productGrid" class="product-grid"></div>
+      </main>
+    </div>
+  </div>
+
+  <script src="js/util.js"></script>
+  <script src="js/firestore.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/auth.js"></script>
 </body>
 </html>
