@@ -1,4 +1,4 @@
-// ========== firestore.js ==========
+//firestore.js
 async function saveUser(uid, idToken, name, email, role = "user", provider = "password") {
   const body = {
     fields: { uid: { stringValue: uid }, name: { stringValue: name }, email: { stringValue: email }, role: { stringValue: role }, provider: { stringValue: provider } }
@@ -28,8 +28,7 @@ async function addToCollection(collection, id, idToken, data) {
     body: JSON.stringify({ fields: data }),
   });
 }
-// --- firestore.js additions ---
-// Safely get a document (returns json or null)
+
 async function getDoc(path) {
   try {
     const res = await fetch(`${FIRESTORE_BASE}/${path}`);
@@ -40,7 +39,7 @@ async function getDoc(path) {
   }
 }
 
-// Update fields of an existing doc (PATCH)
+// patch
 async function updateDoc(path, fields, idToken) {
   return fetch(`${FIRESTORE_BASE}/${path}?updateMask.fieldPaths=*`, {
     method: "PATCH",
@@ -49,7 +48,7 @@ async function updateDoc(path, fields, idToken) {
   }).then(r => r.json());
 }
 
-// Remove a document (DELETE)
+// DELETE
 async function deleteDoc(path, idToken) {
   return fetch(`${FIRESTORE_BASE}/${path}`, {
     method: "DELETE",
@@ -57,13 +56,9 @@ async function deleteDoc(path, idToken) {
   }).then(r => r.json().catch(()=>({})));
 }
 
-// Convenience: increment quantity if exists, else create
-// collection: "cart", docId: "<uid>_<productId>"
 async function upsertCartItem(collection, docId, idToken, productId, userId, increment = 1) {
-  // try to fetch existing cart doc
   const existing = await getDoc(`${collection}/${docId}`);
   if (existing && existing.fields && existing.fields.quantity) {
-    // increment quantity
     const prev = parseInt(existing.fields.quantity.integerValue || existing.fields.quantity.stringValue || 0, 10) || 0;
     const newQty = prev + increment;
     return updateDoc(`${collection}/${docId}`, {
@@ -72,7 +67,6 @@ async function upsertCartItem(collection, docId, idToken, productId, userId, inc
       quantity: { integerValue: newQty }
     }, idToken);
   } else {
-    // create/patch doc with quantity = increment
     const fields = {
       user: { stringValue: userId },
       productId: { stringValue: productId },

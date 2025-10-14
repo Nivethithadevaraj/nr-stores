@@ -1,12 +1,11 @@
-// ========== auth.js ==========
-
 // --- Signup ---
 async function signup() {
   const name = document.getElementById("signupName")?.value?.trim();
   const email = document.getElementById("signupEmail")?.value?.trim();
   const password = document.getElementById("signupPassword")?.value?.trim();
 
-  if (!name || !email || !password) return showMessage("⚠️ Fill all fields", "#b22222");
+  if (!name || !email || !password)
+    return showMessage("⚠️ Fill all fields", "#b22222");
 
   showMessage("⏳ Creating account...");
   try {
@@ -56,11 +55,9 @@ async function login() {
     const data = await res.json();
     if (data.error) throw data.error;
 
-    localStorage.setItem("idToken", data.idToken);
-    localStorage.setItem("email", data.email);
+    onLoginSuccess(data);
 
     showMessage("✅ Login successful!", "green");
-    onLoginSuccess();
   } catch (e) {
     console.error(e);
     showMessage("❌ Login failed", "#b22222");
@@ -69,16 +66,67 @@ async function login() {
 
 // --- Logout ---
 function logout() {
-  localStorage.clear();
+  if (typeof SESSION !== "undefined") {
+    SESSION.email = null;
+    SESSION.idToken = null;
+    SESSION.refreshToken = null;
+  }
+
   document.getElementById("userDashboard").classList.add("hidden");
   document.getElementById("authContainer").classList.remove("hidden");
   showMessage("👋 Logged out successfully", "#0b486b");
 }
 
-// --- Keep session persistent ---
-function checkLoginPersist() {
-  const token = localStorage.getItem("idToken");
-  if (token) onLoginSuccess();
+function parseJwt(token) {
+  try {
+    const base64Url = token.split(".")[1];
+    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonPayload);
+  } catch (e) {
+    return {};
+  }
 }
 
-window.onload = checkLoginPersist;
+async function saveUser(uid, idToken, name, email) {
+  const body = {
+    fields: {
+      name: { stringValue: name },
+      email: { stringValue: email },
+      createdAt: { timestampValue: new Date().toISOString() },
+    },
+  };
+
+  await fetch(`${FIRESTORE_BASE}/users/${uid}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${idToken}`,
+    },
+    body: JSON.stringify(body),
+  });
+}
+
+function showMessage(msg, color = "#333") {
+  const el = document.getElementById("message");
+  if (!el) return alert(msg);
+  el.style.color = color;
+  el.textContent = msg;
+}
+
+function switchForm(target) {
+  const loginForm = document.getElementById("loginForm");
+  const signupForm = document.getElementById("signupForm");
+  if (target === "signup") {
+    loginForm.classList.add("hidden");
+    signupForm.classList.remove("hidden");
+  } else {
+    signupForm.classList.add("hidden");
+    loginForm.classList.remove("hidden");
+  }
+}
