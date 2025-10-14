@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>NR-Stores — Signup / Login</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <h2 id="formTitle">Sign Up</h2>
+
+    <div id="signupForm" class="form">
+      <label>Full Name</label>
+      <input type="text" id="signupName" placeholder="Your full name" />
+
+      <label>Email</label>
+      <input type="email" id="signupEmail" placeholder="email@example.com" />
+
+      <label>Password</label>
+      <input type="password" id="signupPassword" placeholder="Choose a password" />
+
+      <button id="signupBtn" onclick="signup()">SIGN UP</button>
+      <p class="switch">Already registered? <a href="#" onclick="switchForm('login')">Login</a></p>
+    </div>
+
+    <div id="loginForm" class="form hidden">
+      <label>Email</label>
+      <input type="email" id="loginEmail" placeholder="email@example.com" />
+
+      <label>Password</label>
+      <input type="password" id="loginPassword" placeholder="Your password" />
+
+      <button id="loginBtn" onclick="login()">LOGIN</button>
+      <p class="switch">New here? <a href="#" onclick="switchForm('signup')">Create account</a></p>
+    </div>
+<button id="googleLoginBtn" onclick="googleLogin()" class="google-btn">
+  <img src="https://developers.google.com/identity/images/g-logo.png" alt="Google logo" />
+  Sign in with Google
+</button>
+
+    <div id="message" role="status"></div>
+  </div>
+
+  <script src="script.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+</body>
+</html>
