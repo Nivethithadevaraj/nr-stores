@@ -5,16 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NR-Stores</title>
   <link rel="stylesheet" href="style.css" />
-  <style>
-    .hidden {
-      display: none !important;
-    }
-    /* Optional: make logout closer to icons */
-    .icons button#logoutBtn {
-      margin-left: 8px;
-      padding: 6px 10px;
-    }
-  </style>
 </head>
 <body>
   <!-- LOGIN / SIGNUP -->
@@ -30,22 +20,21 @@
     <div id="message"></div>
   </div>
 
-  <!-- USER DASHBOARD (HIDDEN INITIALLY) -->
+  <!-- DASHBOARD -->
   <div id="userDashboard" class="hidden">
     <header class="main-header">
-      <div class="brand">NR-Stores</div>
+      <div class="brand" id="homeLogo">NR-Stores</div>
 
-      <!-- search bar moved properly inside dashboard -->
       <div class="search-box">
         <input type="text" id="searchInput" placeholder="Search for products..." />
         <button id="searchBtn">🔍</button>
       </div>
 
       <div class="icons">
-        <span id="cartBtn">🛒</span>
-        <span id="wishlistBtn">❤️</span>
-        <span id="profileBtn">🙎‍♀️</span>
-        <span id="logoutbtrn"><button id="logoutBtn" onclick="logout()">Logout</button></span>
+        <span id="cartBtn" title="Cart">🛒</span>
+        <span id="wishlistBtn" title="Wishlist">❤️</span>
+        <span id="profileBtn" title="Profile">👤</span>
+        <button id="logoutBtn" onclick="logout()">Logout</button>
       </div>
     </header>
 
