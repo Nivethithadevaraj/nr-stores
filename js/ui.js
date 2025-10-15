@@ -1,9 +1,46 @@
+// ==================== SESSION HANDLING ====================
 
 const SESSION = {
   email: null,
   idToken: null,
   refreshToken: null,
 };
+
+// ✅ Toast message utility (non-blocking)
+function showMessage(msg, type = "info") {
+  let toast = document.getElementById("toastMessage");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "toastMessage";
+    toast.style.position = "fixed";
+    toast.style.bottom = "20px";
+    toast.style.right = "20px";
+    toast.style.padding = "10px 15px";
+    toast.style.borderRadius = "8px";
+    toast.style.color = "#fff";
+    toast.style.fontSize = "14px";
+    toast.style.zIndex = "9999";
+    toast.style.boxShadow = "0 2px 6px rgba(0,0,0,0.2)";
+    toast.style.transition = "opacity 0.4s";
+    toast.style.opacity = "0";
+    document.body.appendChild(toast);
+  }
+
+  const colors = {
+    info: "#2196f3",
+    success: "#4caf50",
+    error: "#f44336",
+    warning: "#ff9800"
+  };
+  toast.style.backgroundColor = colors[type] || colors.info;
+  toast.textContent = msg;
+  toast.style.opacity = "1";
+
+  // Fade out after 2.5s
+  setTimeout(() => {
+    toast.style.opacity = "0";
+  }, 2500);
+}
 
 function setSessionFromLoginData(loginData) {
   SESSION.email = loginData.email || SESSION.email;
@@ -13,7 +50,7 @@ function setSessionFromLoginData(loginData) {
 
 function getSessionOrThrow() {
   if (!SESSION.idToken || !SESSION.email) {
-    alert("Please login again");
+    showMessage("Please login again", "warning");
     throw new Error("No session present");
   }
   const uid = SESSION.email.replace(/[@.]/g, "_");
@@ -24,13 +61,15 @@ function authHeader(idToken) {
   return idToken ? { Authorization: `Bearer ${idToken}` } : {};
 }
 
+// ==================== FIRESTORE HELPERS ====================
+
 async function getCollection(collectionName) {
   const token = SESSION.idToken;
   const res = await fetch(`${FIRESTORE_BASE}/${collectionName}`, {
     headers: authHeader(token),
   });
   if (!res.ok) {
-    try { const json = await res.json(); console.error("getCollection error:", json); } catch {}
+    try { const json = await res.json(); console.error("getCollection error:", json); } catch { }
     return [];
   }
   const data = await res.json();
@@ -75,6 +114,8 @@ async function deleteDoc(path, idToken) {
   return res;
 }
 
+// ==================== AUTH SUCCESS ====================
+
 async function onLoginSuccess(loginData) {
   setSessionFromLoginData(loginData);
   const authContainer = document.getElementById("authContainer") || document.querySelector(".container");
@@ -84,6 +125,8 @@ async function onLoginSuccess(loginData) {
 
   await showHome();
 }
+
+// ==================== HOME ====================
 
 async function showHome() {
   const categories = await getCollection("categories");
@@ -166,8 +209,6 @@ function renderCategories(cats, subs, products) {
     sidebar.appendChild(catDiv);
   });
 }
-
-// -products
 function renderProducts(products) {
   const grid = document.getElementById("productGrid");
   if (!grid) return;
@@ -182,25 +223,41 @@ function renderProducts(products) {
     const f = p.fields || {};
     const img = f.image?.stringValue || "https://placehold.co/200x200?text=No+Image";
     const name = f.name?.stringValue || "Unnamed";
-    const price = f.price?.integerValue || f.price?.doubleValue || 0;
+    const price =
+      f.price?.integerValue || f.price?.doubleValue || 0;
+    const stock = f.stock?.integerValue ?? 0; 
 
     const div = document.createElement("div");
     div.classList.add("product-card");
+
+    const isOutOfStock = stock <= 0;
+    const cartLabel = isOutOfStock ? "No Stock" : "Add to Cart";
+    const disabledAttr = isOutOfStock ? "disabled" : "";
+
     div.innerHTML = `
       <img src="${img}" alt="${name}" onerror="this.src='https://placehold.co/200x200?text=No+Image'">
       <h4>${name}</h4>
       <p>₹${price}</p>
+      <p style="color:${isOutOfStock ? 'red' : 'black'};">Stock: ${stock}</p>
       <div class="actions">
-        <button id="cart_${index}">Add to Cart</button>
+        <button id="cart_${index}" ${disabledAttr}>${cartLabel}</button>
         <button id="wish_${index}">❤️</button>
       </div>
     `;
 
-    div.querySelector(`#cart_${index}`).onclick = () => addToCart(p);
-    div.querySelector(`#wish_${index}`).onclick = () => addToWishlist(p);
+    // ✅ Bind cart only if stock > 0
+    if (!isOutOfStock) {
+      div.querySelector(`#cart_${index}`).onclick = () => addToCart(p);
+    }
+
+    // ✅ Wishlist works regardless of stock
+    const wishBtn = div.querySelector(`#wish_${index}`);
+    if (wishBtn) wishBtn.onclick = () => addToWishlist(p);
+
     grid.appendChild(div);
   });
 }
+
 
 //cart
 async function addToCart(p) {
@@ -227,10 +284,11 @@ async function addToCart(p) {
       quantity: { integerValue: newQty }
     });
 
-    alert("✅ Added to cart");
+    showMessage("✅ Added to cart", "success");
+    await updateCartCount(uid);
   } catch (err) {
     console.error("addToCart error", err);
-    alert("Failed to add to cart");
+    showMessage("Failed to add to cart", "error");
   }
 }
 
@@ -323,6 +381,7 @@ async function showCart() {
       const idx = cartItems.indexOf(item);
       if (idx > -1) cartItems.splice(idx, 1);
       updateCartSummary(cartItems);
+      await updateCartCount(uid);
       if (!cartItems.length) showCart();
     };
 
@@ -413,7 +472,7 @@ async function saveAddress(uid, idToken, subtotal) {
   const phone = document.getElementById("addrPhone").value.trim();
 
   if (!line1 || !city || !pincode || !phone) {
-    alert("Please fill all address fields.");
+    showMessage("Please fill all address fields.", "warning");
     return;
   }
 
@@ -438,11 +497,112 @@ async function saveAddress(uid, idToken, subtotal) {
     body: JSON.stringify(body),
   });
 
-  alert("✅ Address saved successfully!");
+  showMessage("✅ Address saved successfully!", "success");
   showAddressPage(subtotal);
 }
 
-//BUY NOW
+async function finalizeOrderFromPayment(paymentId) {
+  let sess;
+  try { sess = getSessionOrThrow(); } catch (e) { return; }
+  const { uid, idToken } = sess;
+
+  // 1️⃣ Get payment record
+  const paymentRes = await fetch(`${FIRESTORE_BASE}/payments/${paymentId}`, {
+    headers: authHeader(idToken),
+  });
+  const payment = await paymentRes.json();
+  if (!payment.fields) return;
+
+  // 2️⃣ Get cart and products
+  const [cartDocs, productDocs] = await Promise.all([
+    getCollection("cart"),
+    getCollection("products"),
+  ]);
+  const myCart = cartDocs.filter(c => c.fields?.user?.stringValue === uid);
+  if (!myCart.length) return;
+
+  // 3️⃣ Map products
+  const productMap = {};
+  productDocs.forEach(p => {
+    const pid = p.name.split("/").pop();
+    productMap[pid] = p;
+  });
+
+  // 4️⃣ Prepare order items
+  const items = myCart.map(c => {
+    const pid = c.fields?.productId?.stringValue;
+    const prod = productMap[pid]?.fields;
+    const quantity = parseInt(c.fields.quantity?.integerValue || 1);
+    const price = parseFloat(prod?.price?.integerValue || prod?.price?.doubleValue || 0);
+    return { pid, quantity, price };
+  });
+
+  // 5️⃣ Save order
+  const orderId = `order_${Date.now()}`;
+  const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
+  const orderData = {
+    fields: {
+      orderId: { stringValue: orderId },
+      user: { stringValue: uid },
+      subtotal: { doubleValue: subtotal },
+      mode: { stringValue: payment.fields.mode?.stringValue || payment.fields.method?.stringValue || "N/A" },
+      status: { stringValue: "paid" },
+      createdAt: { timestampValue: new Date().toISOString() },
+    },
+  };
+
+  await fetch(`${FIRESTORE_BASE}/orders/${orderId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeader(idToken) },
+    body: JSON.stringify(orderData),
+  });
+
+  // 6️⃣ Reduce product stock correctly
+  for (const item of items) {
+    const pid = item.pid;
+    const product = productMap[pid];
+    if (!product) continue;
+
+    const oldStock = parseInt(product.fields.stock?.integerValue || 0);
+    const newStock = Math.max(0, oldStock - item.quantity);
+
+    const updateBody = {
+      fields: {
+        stock: { integerValue: newStock },
+      },
+    };
+
+    // ✅ Correct REST patch call
+    await fetch(`${FIRESTORE_BASE}/products/${pid}?updateMask.fieldPaths=stock`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeader(idToken),
+      },
+      body: JSON.stringify(updateBody),
+    });
+  }
+
+  // 7️⃣ Clear cart
+  await clearUserCart(uid, idToken);
+
+  console.log("✅ Stock reduced successfully after order.");
+  showHome();
+}
+
+
+// ✅ Clear user’s cart
+async function clearUserCart(uid, idToken) {
+  const cartDocs = await getCollection("cart");
+  const userItems = cartDocs.filter(c => c.fields?.user?.stringValue === uid);
+  for (const item of userItems) {
+    const docId = item.name.split("/").pop();
+    await deleteDoc(`cart/${docId}`, idToken);
+  }
+  await updateCartCount(uid);
+}
+
+// ✅ CART SUMMARY (Buy Now button)
 function createCartSummaryInside(grid, cartItems) {
   let summary = document.getElementById("cartSummary");
   if (summary) summary.remove();
@@ -455,30 +615,30 @@ function createCartSummaryInside(grid, cartItems) {
       <button class="buy-btn" id="buyNowBtn">Buy Now</button>
     </div>
   `;
-  grid.appendChild(summary); 
+  grid.appendChild(summary);
 
   updateCartSummary(cartItems);
 
   const btn = document.getElementById("buyNowBtn");
-  if (btn) btn.onclick = async () => {
-    const subtotal = cartItems.reduce((sum, it) => {
-      const price = parseFloat(it.product?.fields?.price?.integerValue || it.product?.fields?.price?.doubleValue || 0) || 0;
-      return sum + price * it.quantity;
-    }, 0);
+  if (btn)
+    btn.onclick = async () => {
+      const subtotal = cartItems.reduce((sum, it) => {
+        const price = parseFloat(it.product?.fields?.price?.integerValue || it.product?.fields?.price?.doubleValue || 0) || 0;
+        return sum + price * it.quantity;
+      }, 0);
 
-    let sess;
-    try { sess = getSessionOrThrow(); } catch (e) { return; }
-    const { uid, idToken } = sess;
-    await addToCollection("checkout", uid, idToken, {
-      user: { stringValue: uid },
-      subtotal: { integerValue: subtotal },
-      status: { stringValue: "address_pending" },
-      createdAt: { timestampValue: new Date().toISOString() },
-    });
+      let sess;
+      try { sess = getSessionOrThrow(); } catch (e) { return; }
+      const { uid, idToken } = sess;
+      await addToCollection("checkout", uid, idToken, {
+        user: { stringValue: uid },
+        subtotal: { integerValue: subtotal },
+        status: { stringValue: "address_pending" },
+        createdAt: { timestampValue: new Date().toISOString() },
+      });
 
-    // show address page
-    showAddressPage(subtotal);
-  };
+      showAddressPage(subtotal);
+    };
 }
 
 function updateCartSummary(cartItems) {
@@ -495,6 +655,25 @@ function removeCartSummary() {
   if (summary) summary.remove();
 }
 
+// ==================== CART COUNT ====================
+async function updateCartCount(uid) {
+  const cartBtn = document.getElementById("cartBtn");
+  if (!cartBtn) return;
+
+  const cartDocs = await getCollection("cart");
+  const count = (cartDocs || []).filter(c => c.fields?.user?.stringValue === uid).length;
+
+  cartBtn.innerHTML = `🛒 Cart (${count})`;
+}
+
+// Run cart count check on home load
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    const sess = getSessionOrThrow();
+    await updateCartCount(sess.uid);
+  } catch {}
+});
+
 //wishist
 async function addToWishlist(p) {
   let sess;
@@ -506,7 +685,7 @@ async function addToWishlist(p) {
     user: { stringValue: uid },
     productId: { stringValue: id },
   });
-  alert("❤️ Added to wishlist");
+  showMessage("❤️ Added to wishlist", "success");
 }
 
 async function showWishlist() {
@@ -555,6 +734,7 @@ async function showWishlist() {
   renderCategories(categories, subcategories, allProducts);
 }
 
+
 // payment
 async function showPaymentPage(subtotal) {
   let sess;
@@ -582,7 +762,7 @@ async function showPaymentPage(subtotal) {
   document.getElementById("payBtn").onclick = async () => {
     const mode = document.querySelector("input[name='payMode']:checked")?.value;
     const amount = parseFloat(document.getElementById("amountInput").value);
-    if (!mode || !amount) return alert("Select a payment mode and amount");
+    if (!mode || !amount) return showMessage("Select a payment mode and amount", "warning");
 
     const orderId = `order_${Date.now()}`;
     const paymentId = `pay_${Date.now()}`;
@@ -614,7 +794,8 @@ async function showPaymentPage(subtotal) {
     // delete checkout doc if exists
     await deleteDoc(`checkout/${uid}`, idToken);
 
-    alert("✅ Payment successful! Order placed.");
+    showMessage("✅ Payment successful! Order placed.", "success");
+    await finalizeOrderFromPayment(paymentId);
     showHome();
   };
 }
