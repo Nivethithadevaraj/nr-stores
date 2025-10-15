@@ -1,5 +1,4 @@
-// auth.js — Login, Signup, Role Detection via Firebase Auth REST API
-
+/* ---------------------- SIGNUP ---------------------- */
 async function signupUser(email, password, name) {
   try {
     const res = await fetch(
@@ -14,8 +13,8 @@ async function signupUser(email, password, name) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.error?.message || "Signup failed");
 
-    // create Firestore user profile
     const uid = email.replace(/[@.]/g, "_");
+
     await fetch(`${FIRESTORE_BASE}/users/${uid}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -37,6 +36,7 @@ async function signupUser(email, password, name) {
   }
 }
 
+/* ---------------------- LOGIN ---------------------- */
 async function loginUser(email, password) {
   try {
     const res = await fetch(
@@ -57,10 +57,8 @@ async function loginUser(email, password) {
       refreshToken: data.refreshToken,
     };
 
-    // store session in ui.js memory
     setSessionFromLoginData(loginData);
 
-    // fetch user Firestore data to check role
     const uid = email.replace(/[@.]/g, "_");
     const userRes = await fetch(`${FIRESTORE_BASE}/users/${uid}`);
     const userData = await userRes.json();
@@ -69,12 +67,10 @@ async function loginUser(email, password) {
     showMessage("✅ Login successful!", "green");
 
     if (role === "admin") {
-      // show admin dashboard
       document.getElementById("authContainer").classList.add("hidden");
       document.getElementById("adminDashboard").classList.remove("hidden");
-      renderAdminUI(); // from ui.js
+      renderAdminUI();
     } else {
-      // show user dashboard
       onLoginSuccess(loginData);
     }
   } catch (err) {
@@ -83,19 +79,128 @@ async function loginUser(email, password) {
   }
 }
 
-// ---------- EVENT LISTENERS ----------
+/******************************************************
+ * GOOGLE SIGN-IN (Popup + Firebase REST)
+ ******************************************************/
+async function googleLogin() {
+  showMessage("⏳ Redirecting to Google...");
 
+  const CLIENT_ID =
+    "857786713179-q8qk8g7bonk9tvpi5ahj6pcqu3hs8mun.apps.googleusercontent.com";
+  const REDIRECT_URI = "http://127.0.0.1:5500/"; // Must match OAuth2 setup
+
+  // Step 1️⃣: Open Google OAuth popup
+  const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
+    REDIRECT_URI
+  )}&response_type=token&scope=email%20profile&include_granted_scopes=true`;
+
+  const popup = window.open(authUrl, "googleLogin", "width=500,height=600");
+
+  // Step 2️⃣: Wait for popup redirect with token
+  const pollTimer = setInterval(async function () {
+    try {
+      if (popup.location.hash) {
+        clearInterval(pollTimer);
+        const hash = popup.location.hash.substring(1);
+        const params = new URLSearchParams(hash);
+        const accessToken = params.get("access_token");
+        popup.close();
+
+        if (!accessToken) throw new Error("No access token found.");
+
+        // Step 3️⃣: Exchange Google access token for Firebase ID token
+        const res = await fetch(
+          `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${API_KEY}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              postBody: `access_token=${accessToken}&providerId=google.com`,
+              requestUri: REDIRECT_URI,
+              returnSecureToken: true,
+              returnIdpCredential: true,
+            }),
+          }
+        );
+
+        const data = await res.json();
+        if (data.error) throw data.error;
+
+        const idToken = data.idToken;
+        const decoded = parseJwt(idToken);
+        const uid = decoded ? decoded.user_id : null;
+        const email = data.email || decoded?.email;
+
+        // Step 4️⃣: Create user in Firestore if new
+        const firestoreUrl = `${FIRESTORE_BASE}/users/${uid}`;
+        const docBody = {
+          fields: {
+            name: { stringValue: data.displayName || "Google User" },
+            email: { stringValue: email },
+            role: { stringValue: "user" },
+            provider: { stringValue: "google" },
+            joinedOn: { timestampValue: new Date().toISOString() },
+          },
+        };
+
+        await fetch(firestoreUrl, {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${idToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(docBody),
+        });
+
+        showMessage(`✅ Logged in as ${email}`, "green");
+
+        // Step 5️⃣: Handle session and UI
+        setSessionFromLoginData({
+          email,
+          idToken,
+          refreshToken: data.refreshToken,
+        });
+
+        onLoginSuccess(data);
+      }
+    } catch (err) {
+      // Ignore CORS until redirect completes
+    }
+  }, 500);
+}
+
+/* ---------------------- JWT Decode ---------------------- */
+function parseJwt(token) {
+  try {
+    const base64 = token.split(".")[1];
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split("")
+        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+        .join("")
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
+
+/******************************************************
+ * EVENT HANDLERS
+ ******************************************************/
 document.addEventListener("DOMContentLoaded", () => {
   const loginBtn = document.getElementById("loginBtn");
   const signupBtn = document.getElementById("signupBtn");
   const showSignup = document.getElementById("showSignup");
   const showLogin = document.getElementById("showLogin");
+  const googleBtn = document.getElementById("googleLoginBtn");
 
   if (loginBtn)
     loginBtn.addEventListener("click", async () => {
       const email = document.getElementById("loginEmail")?.value.trim();
       const password = document.getElementById("loginPassword")?.value.trim();
-      if (!email || !password) return showMessage("Enter email & password", "#b22222");
+      if (!email || !password)
+        return showMessage("Enter email & password", "#b22222");
       await loginUser(email, password);
     });
 
@@ -122,4 +227,17 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("loginForm").classList.remove("hidden");
       document.getElementById("formTitle").innerText = "Login";
     });
+
+  if (googleBtn) googleBtn.addEventListener("click", googleLogin);
+});
+
+/* Allow pressing Enter key to submit form */
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Enter") {
+    const signupVisible = !document
+      .getElementById("signupForm")
+      .classList.contains("hidden");
+    if (signupVisible) signupUser();
+    else loginUser();
+  }
 });

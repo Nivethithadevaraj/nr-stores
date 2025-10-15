@@ -24,24 +24,41 @@ function authHeader(idToken) {
 }
 
 // 🔑 LOGIN SUCCESS
+// Detect role and switch UI
 async function onLoginSuccess(loginData) {
   setSessionFromLoginData(loginData);
-  const authContainer = document.getElementById("authContainer");
-  if (authContainer) authContainer.classList.add("hidden");
 
-  if (loginData.role === "admin") {
-    await renderAdminUI();
-  } else {
-    const dashboard = document.getElementById("userDashboard");
-    if (dashboard) dashboard.classList.remove("hidden");
-    await showHome();
-    await updateCartCount(getSessionOrThrow().uid);
+  const uid = loginData.email.replace(/[@.]/g, "_");
+  const idToken = loginData.idToken;
+
+  try {
+    const userDoc = await fetch(`${FIRESTORE_BASE}/users/${uid}`, {
+      headers: { Authorization: `Bearer ${idToken}` }
+    }).then(r => r.json());
+
+    const role = userDoc?.fields?.role?.stringValue || "user";
+
+    document.getElementById("authContainer").classList.add("hidden");
+
+    if (role === "admin") {
+      // Show admin dashboard
+      document.getElementById("userDashboard").classList.add("hidden");
+      document.getElementById("adminDashboard").classList.remove("hidden");
+      setupAdminSidebar(); // 🔥 this function sets up the sidebar & actions
+    } else {
+      // Show user dashboard
+      document.getElementById("adminDashboard").classList.add("hidden");
+      document.getElementById("userDashboard").classList.remove("hidden");
+      await showHome();
+      await updateCartCount(uid);
+    }
+  } catch (err) {
+    console.error("Login role fetch failed", err);
+    showMessage("Login failed, please try again.", "#b22222");
   }
 }
 
-// ==========================================================
-// ===================== USER FLOW ==========================
-// ==========================================================
+//user
 
 async function showHome() {
   const categories = await getCollection("categories");
@@ -718,7 +735,6 @@ async function renderAdminUI() {
   }
 
   adminDiv.classList.remove("hidden");
-  setupLogout();
   loadAdminStats();
   loadAdminProducts();
 
@@ -830,12 +846,328 @@ async function editProductAdmin(e) {
   loadAdminProducts();
 }
 
-// 🔹 Logout
-function setupLogout() {
-  const btn = document.getElementById("logoutBtn");
-  if (btn)
-    btn.onclick = () => {
-      SESSION.email = SESSION.idToken = SESSION.refreshToken = SESSION.role = null;
-      location.reload();
-    };
+function logout() {
+  SESSION.email = null;
+  SESSION.idToken = null;
+  SESSION.refreshToken = null;
+
+  // Hide all dashboards
+  document.getElementById("userDashboard")?.classList.add("hidden");
+  document.getElementById("adminDashboard")?.classList.add("hidden");
+
+  // Show login
+  document.getElementById("authContainer")?.classList.remove("hidden");
+
+  showMessage("Logged out successfully.", "#0b486b");
 }
+
+// Attach logout to both buttons
+document.addEventListener("DOMContentLoaded", () => {
+  const userLogout = document.getElementById("logoutBtn");
+  const adminLogout = document.getElementById("adminLogoutBtn");
+
+  if (userLogout) userLogout.onclick = logout;
+  if (adminLogout) adminLogout.onclick = logout;
+});
+/***************************************************
+ * ADMIN DASHBOARD LOGIC (CLEAN VERSION)
+ ***************************************************/
+
+// This runs when an admin logs in
+async function renderAdminUI() {
+  console.log("Admin UI rendering...");
+
+  // Hide everything else
+  document.getElementById("authContainer")?.classList.add("hidden");
+  document.getElementById("userDashboard")?.classList.add("hidden");
+  document.getElementById("adminDashboard")?.classList.remove("hidden");
+
+  // Initialize sidebar + listeners
+  setupAdminSidebar();
+
+  // Show welcome content
+  const adminMain = document.getElementById("adminMain");
+  if (adminMain) {
+    adminMain.innerHTML = `
+      <h2>Welcome, Admin 👋</h2>
+      <p>Select an action from the sidebar to begin.</p>
+    `;
+  }
+}
+
+/***************************************************
+ * SETUP SIDEBAR ACTIONS
+ ***************************************************/
+function setupAdminSidebar() {
+  const manageBtn = document.getElementById("adminManageProducts");
+  const creditBtn = document.getElementById("adminCustomerCredit");
+  const reportBtn = document.getElementById("adminReports");
+  const logoutBtn = document.getElementById("adminLogoutBtn");
+
+  if (manageBtn) manageBtn.onclick = loadAdminProducts;
+  if (creditBtn) creditBtn.onclick = loadCustomerCredits;
+  if (reportBtn) reportBtn.onclick = loadAdminReports;
+  if (logoutBtn) logoutBtn.onclick = logout;
+}
+
+/***************************************************
+ * LOAD ADMIN PRODUCTS (CRUD)
+ ***************************************************/
+async function loadAdminProducts() {
+  const adminMain = document.getElementById("adminMain");
+  if (!adminMain) return;
+
+  adminMain.innerHTML = `<h2>📦 Manage Products</h2><p>Loading...</p>`;
+
+  const products = await getCollection("products");
+  adminMain.innerHTML = `
+    <h2>📦 Manage Products</h2>
+    <button id="addProdBtn">➕ Add New Product</button>
+    <div id="prodList" style="margin-top:12px;"></div>
+  `;
+
+  const listDiv = document.getElementById("prodList");
+
+  if (!products?.length) {
+    listDiv.innerHTML = `<p>No products found.</p>`;
+    return;
+  }
+
+  products.forEach((p) => {
+    const f = p.fields;
+    const id = p.name.split("/").pop();
+    const div = document.createElement("div");
+    div.classList.add("admin-product-row");
+    div.innerHTML = `
+      <b>${f.name?.stringValue || "Unnamed"}</b> — ₹${f.price?.integerValue || f.price?.doubleValue || 0}
+      <button class="editBtn" data-id="${id}">✏️</button>
+      <button class="delBtn" data-id="${id}">🗑️</button>
+    `;
+    listDiv.appendChild(div);
+  });
+
+  document.querySelectorAll(".delBtn").forEach((btn) => {
+    btn.onclick = async (e) => {
+      const pid = e.target.dataset.id;
+      await deleteDoc(`products/${pid}`, getSessionOrThrow().idToken);
+      showMessage("Product deleted", "#b22222");
+      loadAdminProducts();
+    };
+  });
+
+  document.querySelectorAll(".editBtn").forEach((btn) => {
+    btn.onclick = async (e) => {
+      const pid = e.target.dataset.id;
+      const product = await getDoc(`products/${pid}`);
+      showProductEditForm(pid, product.fields);
+    };
+  });
+
+  document.getElementById("addProdBtn").onclick = () => showProductEditForm(null, {});
+}
+
+/***************************************************
+ * PRODUCT ADD / EDIT FORM
+ ***************************************************/
+function showProductEditForm(pid, fields = {}) {
+  const adminMain = document.getElementById("adminMain");
+  adminMain.innerHTML = `
+    <h2>${pid ? "✏️ Edit Product" : "➕ Add Product"}</h2>
+    <div class="form-grid">
+      <label>Name</label>
+      <input id="prodName" value="${fields.name?.stringValue || ""}">
+      <label>Price</label>
+      <input id="prodPrice" type="number" value="${fields.price?.integerValue || fields.price?.doubleValue || ""}">
+      <label>Stock</label>
+      <input id="prodStock" type="number" value="${fields.stock?.integerValue || 0}">
+      <label>Image URL</label>
+      <input id="prodImg" value="${fields.image?.stringValue || ""}">
+      <label>Category</label>
+      <input id="prodCat" value="${fields.category?.stringValue || ""}">
+      <label>Subcategory</label>
+      <input id="prodSub" value="${fields.subcategory?.stringValue || ""}">
+      <label>Description</label>
+      <textarea id="prodDesc">${fields.description?.stringValue || ""}</textarea>
+    </div>
+    <button id="saveProdBtn">${pid ? "Update" : "Add"} Product</button>
+    <button id="cancelProdBtn">Cancel</button>
+  `;
+
+  document.getElementById("cancelProdBtn").onclick = loadAdminProducts;
+  document.getElementById("saveProdBtn").onclick = async () => {
+    const name = document.getElementById("prodName").value.trim();
+    const price = parseFloat(document.getElementById("prodPrice").value);
+    const stock = parseInt(document.getElementById("prodStock").value);
+    const img = document.getElementById("prodImg").value.trim();
+    const cat = document.getElementById("prodCat").value.trim();
+    const sub = document.getElementById("prodSub").value.trim();
+    const desc = document.getElementById("prodDesc").value.trim();
+
+    const data = {
+      fields: {
+        name: { stringValue: name },
+        price: { doubleValue: price },
+        stock: { integerValue: stock },
+        image: { stringValue: img },
+        category: { stringValue: cat },
+        subcategory: { stringValue: sub },
+        description: { stringValue: desc },
+      },
+    };
+
+    const token = getSessionOrThrow().idToken;
+
+    await fetch(`${FIRESTORE_BASE}/products/${pid || name}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(data),
+    });
+
+    showMessage(pid ? "✅ Product updated" : "✅ Product added", "green");
+    loadAdminProducts();
+  };
+}
+
+/***************************************************
+ * LOAD CUSTOMER CREDIT (simple editable list)
+ ***************************************************/
+async function loadCustomerCredits() {
+  const adminMain = document.getElementById("adminMain");
+  if (!adminMain) return;
+
+  adminMain.innerHTML = "<h2>💳 Customer Credit</h2><p>Loading...</p>";
+
+  const users = await getCollection("users");
+  adminMain.innerHTML = "<h2>💳 Customer Credit</h2>";
+
+  const table = document.createElement("table");
+  table.innerHTML = "<tr><th>Name</th><th>Email</th><th>Credit Limit</th><th>Action</th></tr>";
+
+  users.forEach((u) => {
+    const f = u.fields;
+    const uid = u.name.split("/").pop();
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${f.name?.stringValue || "No name"}</td>
+      <td>${f.email?.stringValue || ""}</td>
+      <td><input id="credit_${uid}" value="${f.creditLimit?.integerValue || 0}"></td>
+      <td><button class="saveCredit" data-id="${uid}">💾</button></td>
+    `;
+    table.appendChild(tr);
+  });
+
+  adminMain.appendChild(table);
+
+  document.querySelectorAll(".saveCredit").forEach((btn) => {
+    btn.onclick = async (e) => {
+      const uid = e.target.dataset.id;
+      const val = parseInt(document.getElementById(`credit_${uid}`).value);
+      const token = getSessionOrThrow().idToken;
+      const data = { fields: { creditLimit: { integerValue: val } } };
+      await fetch(`${FIRESTORE_BASE}/users/${uid}?updateMask.fieldPaths=creditLimit`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(data),
+      });
+      showMessage("✅ Credit updated", "green");
+    };
+  });
+}
+
+/***************************************************
+ * LOAD SALES REPORTS
+ ***************************************************/
+// ---------------- ADMIN REPORTS ----------------
+
+function loadAdminReports() {
+  const main = document.getElementById("adminMain");
+  main.innerHTML = `
+    <div class="report-section">
+      <h2>📊 Sales Reports</h2>
+      <div class="filter-row">
+        From: <input type="date" id="salesFrom"> 
+        To: <input type="date" id="salesTo">
+        <button id="filterSalesBtn">Filter</button>
+      </div>
+      <div id="salesResults">Select a date range to view sales.</div>
+    </div>
+
+    <div class="report-section" style="margin-top:30px;">
+      <h2>👥 Customer Reports</h2>
+      <div class="filter-row">
+        From: <input type="date" id="custFrom">
+        To: <input type="date" id="custTo">
+        <button id="filterCustBtn">Filter</button>
+      </div>
+      <div id="custResults">Select a date range to view customer activity.</div>
+    </div>
+  `;
+
+  // Sales Filter
+  const salesBtn = document.getElementById("filterSalesBtn");
+  salesBtn.onclick = async () => {
+    const from = document.getElementById("salesFrom").value;
+    const to = document.getElementById("salesTo").value;
+    const resultBox = document.getElementById("salesResults");
+    resultBox.innerHTML = "Loading sales data...";
+
+    const sales = await getCollection("orders");
+    const filtered = (sales || []).filter(o => {
+      const date = new Date(o.fields?.createdAt?.timestampValue || "");
+      return date >= new Date(from) && date <= new Date(to);
+    });
+
+    if (!filtered.length) {
+      resultBox.innerHTML = "<p>No sales found for this range.</p>";
+      return;
+    }
+
+    let html = `<table border="1" cellspacing="0" cellpadding="5">
+      <tr><th>Order ID</th><th>User</th><th>Total</th><th>Mode</th><th>Date</th></tr>`;
+    filtered.forEach(o => {
+      html += `<tr>
+        <td>${o.fields?.orderId?.stringValue}</td>
+        <td>${o.fields?.user?.stringValue}</td>
+        <td>₹${o.fields?.subtotal?.doubleValue || 0}</td>
+        <td>${o.fields?.mode?.stringValue}</td>
+        <td>${new Date(o.fields?.createdAt?.timestampValue).toLocaleString()}</td>
+      </tr>`;
+    });
+    html += "</table>";
+    resultBox.innerHTML = html;
+  };
+
+  // Customer Filter
+  const custBtn = document.getElementById("filterCustBtn");
+  custBtn.onclick = async () => {
+    const from = document.getElementById("custFrom").value;
+    const to = document.getElementById("custTo").value;
+    const resultBox = document.getElementById("custResults");
+    resultBox.innerHTML = "Loading customer data...";
+
+    const users = await getCollection("users");
+    const filtered = (users || []).filter(u => {
+      const date = new Date(u.fields?.joinedOn?.timestampValue || "");
+      return date >= new Date(from) && date <= new Date(to);
+    });
+
+    if (!filtered.length) {
+      resultBox.innerHTML = "<p>No new customers in this range.</p>";
+      return;
+    }
+
+    let html = `<table border="1" cellspacing="0" cellpadding="5">
+      <tr><th>Name</th><th>Email</th><th>Joined</th><th>Provider</th></tr>`;
+    filtered.forEach(u => {
+      html += `<tr>
+        <td>${u.fields?.name?.stringValue}</td>
+        <td>${u.fields?.email?.stringValue}</td>
+        <td>${new Date(u.fields?.joinedOn?.timestampValue).toLocaleDateString()}</td>
+        <td>${u.fields?.provider?.stringValue}</td>
+      </tr>`;
+    });
+    html += "</table>";
+    resultBox.innerHTML = html;
+  };
+}
+

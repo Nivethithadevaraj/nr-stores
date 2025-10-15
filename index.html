@@ -19,6 +19,16 @@
       <input type="password" id="loginPassword" placeholder="Enter password" />
       <button id="loginBtn">LOGIN</button>
       <h4>New here? <a href="#" id="showSignup">Create account</a></h4>
+
+      <!-- ✅ Google Login Button -->
+      <button id="googleLoginBtn" class="google-btn">
+        <img
+          src="https://developers.google.com/identity/images/g-logo.png"
+          alt="Google Logo"
+          style="width:18px; height:18px; vertical-align:middle; margin-right:8px;"
+        />
+        Sign in with Google
+      </button>
     </div>
 
     <div id="signupForm" class="hidden">
@@ -62,32 +72,29 @@
 
   <!-- ADMIN DASHBOARD -->
   <div id="adminDashboard" class="hidden">
-    <header class="main-header admin-header">
-      <div class="brand">🧑‍💼 Admin Panel - NR Stores</div>
-      <div class="icons">
-        <button id="logoutAdminBtn">Logout</button>
-      </div>
+    <header class="main-header">
+      <div class="brand">👑 Admin Panel - NR Stores</div>
+      <button id="adminLogoutBtn">Logout</button>
     </header>
 
-    <div class="admin-body">
-      <aside class="sidebar">
+    <div class="body-container">
+      <aside id="adminSidebar" class="sidebar">
         <h3>Admin Actions</h3>
         <ul>
-          <li><button id="manageProductsBtn">Manage Products</button></li>
-          <li><button id="manageCustomersBtn">Customer Credit</button></li>
-          <li><button id="viewReportsBtn">Reports</button></li>
+          <li><button id="adminManageProducts">Manage Products</button></li>
+          <li><button id="adminCustomerCredit">Customer Credit</button></li>
+          <li><button id="adminReports">Reports</button></li>
         </ul>
       </aside>
 
-      <main class="admin-content">
-        <div id="adminContentArea">
-          <h2>Welcome, Admin 👋</h2>
-          <p>Select an action from the sidebar to get started.</p>
-        </div>
+      <main id="adminMain" class="content">
+        <h2>Welcome, Admin 👋</h2>
+        <p>Select an action from the sidebar to begin.</p>
       </main>
     </div>
   </div>
 
+  <!-- SCRIPTS -->
   <script src="js/util.js"></script>
   <script src="js/firestore.js"></script>
   <script src="js/ui.js"></script>
