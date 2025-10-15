@@ -1,26 +1,41 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="utf-8" />
   <title>NR-Stores</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <link rel="stylesheet" href="style.css" />
 </head>
+
 <body>
   <!-- LOGIN / SIGNUP -->
   <div id="authContainer" class="container">
     <h2 id="formTitle">Login</h2>
-    <label>Email</label>
-    <input type="email" id="loginEmail" placeholder="email@example.com" />
-    <label>Password</label>
-    <input type="password" id="loginPassword" placeholder="Enter password" />
-    <button id="loginBtn" onclick="login()">LOGIN</button>
-    <h4>New here? <a href="#" onclick="switchForm('signup')">Create account</a></h4>
-    <button onclick="googleLogin()">Sign in with Google</button>
-    <div id="message"></div>
+
+    <div id="loginForm">
+      <label>Email</label>
+      <input type="email" id="loginEmail" placeholder="email@example.com" />
+      <label>Password</label>
+      <input type="password" id="loginPassword" placeholder="Enter password" />
+      <button id="loginBtn">LOGIN</button>
+      <h4>New here? <a href="#" id="showSignup">Create account</a></h4>
+    </div>
+
+    <div id="signupForm" class="hidden">
+      <label>Name</label>
+      <input type="text" id="signupName" placeholder="Your name" />
+      <label>Email</label>
+      <input type="email" id="signupEmail" placeholder="email@example.com" />
+      <label>Password</label>
+      <input type="password" id="signupPassword" placeholder="Enter password" />
+      <button id="signupBtn">SIGNUP</button>
+      <h4>Already have an account? <a href="#" id="showLogin">Login</a></h4>
+    </div>
+
+    <div id="message" style="margin-top:12px;"></div>
   </div>
 
-  <!-- DASHBOARD -->
+  <!-- USER DASHBOARD -->
   <div id="userDashboard" class="hidden">
     <header class="main-header">
       <div class="brand" id="homeLogo">NR-Stores</div>
@@ -31,10 +46,9 @@
       </div>
 
       <div class="icons">
-        <span id="cartBtn" title="Cart">🛒</span>
-        <span id="wishlistBtn" title="Wishlist">❤️</span>
-        <span id="profileBtn" title="Profile">🙎‍♀️</span>
-        <button id="logoutBtn" onclick="logout()">Logout</button>
+        <button id="cartBtn" title="Cart">🛒 Cart</button>
+        <button id="wishlistBtn" title="Wishlist">❤️ Wishlist</button>
+        <button id="logoutBtn">Logout</button>
       </div>
     </header>
 
@@ -42,6 +56,34 @@
       <aside class="sidebar" id="sidebar"></aside>
       <main class="content">
         <div id="productGrid" class="product-grid"></div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ADMIN DASHBOARD -->
+  <div id="adminDashboard" class="hidden">
+    <header class="main-header admin-header">
+      <div class="brand">🧑‍💼 Admin Panel - NR Stores</div>
+      <div class="icons">
+        <button id="logoutAdminBtn">Logout</button>
+      </div>
+    </header>
+
+    <div class="admin-body">
+      <aside class="sidebar">
+        <h3>Admin Actions</h3>
+        <ul>
+          <li><button id="manageProductsBtn">Manage Products</button></li>
+          <li><button id="manageCustomersBtn">Customer Credit</button></li>
+          <li><button id="viewReportsBtn">Reports</button></li>
+        </ul>
+      </aside>
+
+      <main class="admin-content">
+        <div id="adminContentArea">
+          <h2>Welcome, Admin 👋</h2>
+          <p>Select an action from the sidebar to get started.</p>
+        </div>
       </main>
     </div>
   </div>

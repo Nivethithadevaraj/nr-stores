@@ -1,13 +1,6 @@
-// --- Signup ---
-async function signup() {
-  const name = document.getElementById("signupName")?.value?.trim();
-  const email = document.getElementById("signupEmail")?.value?.trim();
-  const password = document.getElementById("signupPassword")?.value?.trim();
+// auth.js — Login, Signup, Role Detection via Firebase Auth REST API
 
-  if (!name || !email || !password)
-    return showMessage("⚠️ Fill all fields", "#b22222");
-
-  showMessage("⏳ Creating account...");
+async function signupUser(email, password, name) {
   try {
     const res = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${API_KEY}`,
@@ -19,29 +12,32 @@ async function signup() {
     );
 
     const data = await res.json();
-    if (data.error) throw data.error;
+    if (!res.ok) throw new Error(data.error?.message || "Signup failed");
 
-    const idToken = data.idToken;
-    const uid = parseJwt(idToken)?.user_id;
-    await saveUser(uid, idToken, name, email);
+    // create Firestore user profile
+    const uid = email.replace(/[@.]/g, "_");
+    await fetch(`${FIRESTORE_BASE}/users/${uid}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fields: {
+          name: { stringValue: name },
+          email: { stringValue: email },
+          provider: { stringValue: "password" },
+          joinedOn: { timestampValue: new Date().toISOString() },
+          role: { stringValue: "user" },
+        },
+      }),
+    });
 
-    showMessage("✅ Account created! Please login.", "green");
-    switchForm("login");
-  } catch (e) {
-    console.error(e);
-    showMessage("❌ Signup failed", "#b22222");
+    showMessage("✅ Account created successfully!", "green");
+  } catch (err) {
+    console.error("Signup error:", err);
+    showMessage("Signup failed. Try again.", "#b22222");
   }
 }
 
-// --- Login ---
-async function login() {
-  const email = document.getElementById("loginEmail").value.trim();
-  const password = document.getElementById("loginPassword").value.trim();
-
-  if (!email || !password)
-    return showMessage("⚠️ Fill email & password", "#b22222");
-
-  showMessage("⏳ Logging in...");
+async function loginUser(email, password) {
   try {
     const res = await fetch(
       `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${API_KEY}`,
@@ -53,80 +49,77 @@ async function login() {
     );
 
     const data = await res.json();
-    if (data.error) throw data.error;
+    if (!res.ok) throw new Error(data.error?.message || "Login failed");
 
-    onLoginSuccess(data);
+    const loginData = {
+      email: data.email,
+      idToken: data.idToken,
+      refreshToken: data.refreshToken,
+    };
+
+    // store session in ui.js memory
+    setSessionFromLoginData(loginData);
+
+    // fetch user Firestore data to check role
+    const uid = email.replace(/[@.]/g, "_");
+    const userRes = await fetch(`${FIRESTORE_BASE}/users/${uid}`);
+    const userData = await userRes.json();
+    const role = userData?.fields?.role?.stringValue || "user";
 
     showMessage("✅ Login successful!", "green");
-  } catch (e) {
-    console.error(e);
-    showMessage("❌ Login failed", "#b22222");
+
+    if (role === "admin") {
+      // show admin dashboard
+      document.getElementById("authContainer").classList.add("hidden");
+      document.getElementById("adminDashboard").classList.remove("hidden");
+      renderAdminUI(); // from ui.js
+    } else {
+      // show user dashboard
+      onLoginSuccess(loginData);
+    }
+  } catch (err) {
+    console.error("Login error:", err);
+    showMessage("Invalid credentials. Try again.", "#b22222");
   }
 }
 
-// --- Logout ---
-function logout() {
-  if (typeof SESSION !== "undefined") {
-    SESSION.email = null;
-    SESSION.idToken = null;
-    SESSION.refreshToken = null;
-  }
+// ---------- EVENT LISTENERS ----------
 
-  document.getElementById("userDashboard").classList.add("hidden");
-  document.getElementById("authContainer").classList.remove("hidden");
-  showMessage("👋 Logged out successfully", "#0b486b");
-}
+document.addEventListener("DOMContentLoaded", () => {
+  const loginBtn = document.getElementById("loginBtn");
+  const signupBtn = document.getElementById("signupBtn");
+  const showSignup = document.getElementById("showSignup");
+  const showLogin = document.getElementById("showLogin");
 
-function parseJwt(token) {
-  try {
-    const base64Url = token.split(".")[1];
-    const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-    const jsonPayload = decodeURIComponent(
-      atob(base64)
-        .split("")
-        .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-        .join("")
-    );
-    return JSON.parse(jsonPayload);
-  } catch (e) {
-    return {};
-  }
-}
+  if (loginBtn)
+    loginBtn.addEventListener("click", async () => {
+      const email = document.getElementById("loginEmail")?.value.trim();
+      const password = document.getElementById("loginPassword")?.value.trim();
+      if (!email || !password) return showMessage("Enter email & password", "#b22222");
+      await loginUser(email, password);
+    });
 
-async function saveUser(uid, idToken, name, email) {
-  const body = {
-    fields: {
-      name: { stringValue: name },
-      email: { stringValue: email },
-      createdAt: { timestampValue: new Date().toISOString() },
-    },
-  };
+  if (signupBtn)
+    signupBtn.addEventListener("click", async () => {
+      const name = document.getElementById("signupName")?.value.trim();
+      const email = document.getElementById("signupEmail")?.value.trim();
+      const password = document.getElementById("signupPassword")?.value.trim();
+      if (!name || !email || !password)
+        return showMessage("Fill all fields", "#b22222");
+      await signupUser(email, password, name);
+    });
 
-  await fetch(`${FIRESTORE_BASE}/users/${uid}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${idToken}`,
-    },
-    body: JSON.stringify(body),
-  });
-}
+  if (showSignup)
+    showSignup.addEventListener("click", () => {
+      document.getElementById("loginForm").classList.add("hidden");
+      document.getElementById("signupForm").classList.remove("hidden");
+      document.getElementById("formTitle").innerText = "Signup";
+    });
 
-function showMessage(msg, color = "#333") {
-  const el = document.getElementById("message");
-  if (!el) return alert(msg);
-  el.style.color = color;
-  el.textContent = msg;
-}
-
-function switchForm(target) {
-  const loginForm = document.getElementById("loginForm");
-  const signupForm = document.getElementById("signupForm");
-  if (target === "signup") {
-    loginForm.classList.add("hidden");
-    signupForm.classList.remove("hidden");
-  } else {
-    signupForm.classList.add("hidden");
-    loginForm.classList.remove("hidden");
-  }
-}
+  if (showLogin)
+    showLogin.addEventListener("click", () => {
+      document.getElementById("signupForm").classList.add("hidden");
+      document.getElementById("loginForm").classList.remove("hidden");
+      document.getElementById("formTitle").innerText = "Login";
+    });
+});

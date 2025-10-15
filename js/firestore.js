@@ -1,9 +1,76 @@
-//firestore.js
+// firestore.js - Firestore REST helper functions (used by ui and admin)
+// All functions expect idToken where needed; they return JSON where applicable.
+
+async function getCollection(collectionName) {
+  const res = await fetch(`${FIRESTORE_BASE}/${collectionName}`);
+  if (!res.ok) {
+    console.error("getCollection failed", collectionName, res.status);
+    return [];
+  }
+  const data = await res.json();
+  return data.documents || [];
+}
+
+async function getDoc(path) {
+  // path like "products/prod_tshirt" (no leading slash)
+  const res = await fetch(`${FIRESTORE_BASE}/${path}`);
+  if (!res.ok) return null;
+  return await res.json();
+}
+
+async function addToCollection(collectionName, docId, idToken, fields) {
+  // fields is already the Firestore 'fields' object (e.g. { name: { stringValue: "x" } })
+  const res = await fetch(`${FIRESTORE_BASE}/${collectionName}/${docId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeader(idToken) },
+    body: JSON.stringify({ fields }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    console.error("addToCollection failed:", collectionName, docId, txt);
+  }
+  return res;
+}
+
+async function updateDoc(path, fields, idToken) {
+  // PATCH with updateMask for safety; if caller wants full fields pass all keys
+  const res = await fetch(`${FIRESTORE_BASE}/${path}?updateMask.fieldPaths=*`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...authHeader(idToken) },
+    body: JSON.stringify({ fields }),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    console.error("updateDoc failed:", path, txt);
+  }
+  return res;
+}
+
+async function deleteDoc(path, idToken) {
+  const res = await fetch(`${FIRESTORE_BASE}/${path}`, {
+    method: "DELETE",
+    headers: { ...authHeader(idToken) },
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    console.error("deleteDoc failed:", path, txt);
+  }
+  return res;
+}
+
+// helper: save user (used on signup)
 async function saveUser(uid, idToken, name, email, role = "user", provider = "password") {
   const body = {
-    fields: { uid: { stringValue: uid }, name: { stringValue: name }, email: { stringValue: email }, role: { stringValue: role }, provider: { stringValue: provider } }
+    fields: {
+      uid: { stringValue: uid },
+      name: { stringValue: name },
+      email: { stringValue: email },
+      role: { stringValue: role },
+      provider: { stringValue: provider },
+      createdAt: { timestampValue: new Date().toISOString() }
+    }
   };
-  await fetch(`${FIRESTORE_BASE}/users/${uid}`, {
+  return await fetch(`${FIRESTORE_BASE}/users/${uid}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...authHeader(idToken) },
     body: JSON.stringify(body),
@@ -11,51 +78,14 @@ async function saveUser(uid, idToken, name, email, role = "user", provider = "pa
 }
 
 async function getUser(uid, idToken) {
-  const res = await fetch(`${FIRESTORE_BASE}/users/${uid}`, { headers: authHeader(idToken) });
-  return res.json();
-}
-
-async function getCollection(name) {
-  const res = await fetch(`${FIRESTORE_BASE}/${name}`);
-  const data = await res.json();
-  return data.documents || [];
-}
-
-async function addToCollection(collection, id, idToken, data) {
-  await fetch(`${FIRESTORE_BASE}/${collection}/${id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", ...authHeader(idToken) },
-    body: JSON.stringify({ fields: data }),
+  const res = await fetch(`${FIRESTORE_BASE}/users/${uid}`, {
+    headers: { ...authHeader(idToken) }
   });
+  if (!res.ok) return null;
+  return await res.json();
 }
 
-async function getDoc(path) {
-  try {
-    const res = await fetch(`${FIRESTORE_BASE}/${path}`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-// patch
-async function updateDoc(path, fields, idToken) {
-  return fetch(`${FIRESTORE_BASE}/${path}?updateMask.fieldPaths=*`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", ...authHeader(idToken) },
-    body: JSON.stringify({ fields }),
-  }).then(r => r.json());
-}
-
-// DELETE
-async function deleteDoc(path, idToken) {
-  return fetch(`${FIRESTORE_BASE}/${path}`, {
-    method: "DELETE",
-    headers: { ...authHeader(idToken) },
-  }).then(r => r.json().catch(()=>({})));
-}
-
+// upsert cart item (increment if exists)
 async function upsertCartItem(collection, docId, idToken, productId, userId, increment = 1) {
   const existing = await getDoc(`${collection}/${docId}`);
   if (existing && existing.fields && existing.fields.quantity) {
