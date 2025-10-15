@@ -507,3 +507,97 @@ html, body {
   margin-right: 10px;
   font-weight: 600;
 }
+/* Allow admin dashboard to scroll properly */
+#adminDashboard {
+  overflow-y: auto;
+  max-height: 100vh;
+}
+
+body, html {
+  overflow-y: auto !important;
+  height: auto !important;
+}
+.admin-products {
+  background: #fff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 0 6px rgba(0,0,0,0.1);
+}
+
+.product-list {
+  margin-top: 15px;
+}
+
+.product-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f9f9f9;
+  padding: 8px 10px;
+  margin: 5px 0;
+  border-radius: 8px;
+}
+
+.product-row strong {
+  color: #003366;
+}
+
+.product-row .cat {
+  font-size: 13px;
+  color: #555;
+  margin-left: 8px;
+}
+
+.primary-btn {
+  background: #003366;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.primary-btn:hover {
+  background: #00509e;
+}
+
+.add-product input, .add-product select {
+  display: block;
+  width: 100%;
+  padding: 6px;
+  margin-bottom: 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
+.btn-row {
+  display: flex;
+  gap: 10px;
+}
+.sidebar {
+  background: #f7fbff;
+  border-right: 2px solid #004b7a;
+  padding: 20px;
+  min-width: 240px;
+}
+
+.sidebar h3 {
+  color: #00345f;
+  margin-bottom: 10px;
+}
+
+.sidebar a {
+  display: block;
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-radius: 6px;
+  color: #00345f;
+  text-decoration: none;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.sidebar a:hover {
+  background-color: #004b7a;
+  color: white;
+}

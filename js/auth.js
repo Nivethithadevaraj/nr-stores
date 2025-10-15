@@ -67,10 +67,12 @@ async function loginUser(email, password) {
     showMessage("✅ Login successful!", "green");
 
     if (role === "admin") {
-      document.getElementById("authContainer").classList.add("hidden");
-      document.getElementById("adminDashboard").classList.remove("hidden");
-      renderAdminUI();
-    } else {
+  document.getElementById("authContainer").classList.add("hidden");
+  document.getElementById("userDashboard").classList.add("hidden");
+  document.getElementById("adminDashboard").classList.remove("hidden");
+  setupAdminSidebar();
+}
+else {
       onLoginSuccess(loginData);
     }
   } catch (err) {

@@ -14,3 +14,27 @@ function showMessage(msg, color = "green") {
   el.innerText = msg;
   setTimeout(() => (el.innerText = ""), 4000);
 }
+/***************************************************
+ * CREATE OR UPDATE DOC (for admin products etc)
+ ***************************************************/
+async function createOrUpdateDoc(docPath, body) {
+  const token = SESSION.idToken;
+  if (!token) {
+    alert("Please login again");
+    return;
+  }
+
+  const res = await fetch(`${FIRESTORE_BASE}/${docPath}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify(body)
+  });
+
+  if (!res.ok) {
+    console.error("Firestore save failed", await res.text());
+    alert("❌ Failed to save document");
+  }
+}
