@@ -1,6 +1,4 @@
-/***************************************************
- * GLOBAL CONFIG + SESSION HANDLING
- ***************************************************/
+
 const CATEGORIES = {
   "Electronics": ["Mobiles", "Laptops"],
   "Fashion": ["Men", "Women"],
@@ -31,9 +29,7 @@ function authHeader(idToken) {
   return idToken ? { Authorization: `Bearer ${idToken}` } : {};
 }
 
-/***************************************************
- * LOGIN SUCCESS → ROLE HANDLER
- ***************************************************/
+//LOGIN SUCCESS
 async function onLoginSuccess(loginData) {
   setSessionFromLoginData(loginData);
   const uid = loginData.email.replace(/[@.]/g, "_");
@@ -63,15 +59,16 @@ async function onLoginSuccess(loginData) {
   }
 }
 
-/***************************************************
- * USER SECTION
- ***************************************************/
+ // USER SECTION
 async function showHome() {
   const categories = await getCollection("categories");
   const subcategories = await getCollection("subcategories");
   const products = await getCollection("products");
 
   renderCategories(categories, subcategories, products);
+  const grid = document.getElementById("productGrid");
+if (grid) grid.innerHTML = "";
+
   renderProducts(products);
 
   const searchBtn = document.getElementById("searchBtn");
@@ -88,9 +85,6 @@ async function showHome() {
   }
 }
 
-/***************************************************
- * DYNAMIC CATEGORY SIDEBAR + PRODUCT LOADER
- ***************************************************/
 
 // Build categories from Firestore
 async function renderCategorySidebar() {
@@ -125,9 +119,7 @@ async function renderCategorySidebar() {
   sidebar.innerHTML = html;
 }
 
-/***************************************************
- * LOAD PRODUCTS FOR USERS
- ***************************************************/
+ //LOAD PRODUCTS FOR USERS
 async function loadProducts(category = "All Products", subcategory = null) {
   const grid = document.getElementById("productGrid");
   grid.innerHTML = "Loading products...";
@@ -137,18 +129,19 @@ async function loadProducts(category = "All Products", subcategory = null) {
     grid.innerHTML = "No products found.";
     return;
   }
+const allProducts = products.map(doc => {
+  const f = doc.fields || {};
+  return {
+    docPath: doc.name, 
+    name: f.name?.stringValue || "Unnamed",
+    price: f.price?.integerValue || f.price?.doubleValue || 0,
+    category: f.category?.stringValue || "Uncategorized",
+    subcategory: f.subcategory?.stringValue || "",
+    stock: f.stock?.integerValue || 0,
+    image: f.image?.stringValue || "https://placehold.co/200x200?text=No+Image",
+  };
+});
 
-  const allProducts = products.map(doc => {
-    const f = doc.fields || {};
-    return {
-      name: f.name?.stringValue || f.name || "Unnamed",
-      price: f.price?.integerValue || f.price?.doubleValue || f.price || 0,
-      category: f.category?.stringValue || f.category || "Uncategorized",
-      subcategory: f.subcategory?.stringValue || f.subcategory || "",
-      stock: f.stock?.integerValue || f.stock?.doubleValue || f.stock || 0,
-      createdAt: f.createdAt?.timestampValue || f.createdAt || new Date().toISOString(),
-    };
-  });
 
   // Filter
   const filtered = allProducts.filter(p => {
@@ -183,9 +176,7 @@ async function loadProducts(category = "All Products", subcategory = null) {
     .join("");
 }
 
-/***************************************************
- * INIT ON PAGE LOAD
- ***************************************************/
+ //INIT ON PAGE LOAD
 document.addEventListener("DOMContentLoaded", () => {
   if (document.getElementById("sidebar")) {
     renderCategorySidebar();
@@ -231,24 +222,21 @@ function renderProducts(products) {
   });
 }
 
-// Add to cart - checks session, then upserts cart doc
+// Add to cart
 async function addToCart(p) {
   let sess;
   try { sess = getSessionOrThrow(); } catch (e) { return; }
   const { uid, idToken } = sess;
-  const productId = p.name.split("/").pop();
+  const productId = p.docPath ? p.docPath.split("/").pop() : p.name.split("/").pop();
   const docId = `${uid}_${productId}`;
 
   try {
-    // Check stock before adding: read product doc
     const prodDoc = await getDoc(`products/${productId}`);
     const stock = parseInt(prodDoc?.fields?.stock?.integerValue || 0, 10);
     if (stock <= 0) {
       showMessage("Product out of stock", "#b22222");
       return;
     }
-
-    // upsert cart item using helper
     await upsertCartItem("cart", docId, idToken, productId, uid, 1);
     showMessage("✅ Added to cart", "green");
     await updateCartCount(uid);
@@ -326,7 +314,6 @@ async function showCart() {
 
     div.querySelector(".inc").onclick = async () => {
       const newQty = item.quantity + 1;
-      // ensure not exceeding stock
       const prod = await getDoc(`products/${item.productId}`);
       const stock = parseInt(prod?.fields?.stock?.integerValue || 0, 10);
       if (newQty > stock) {
@@ -348,7 +335,6 @@ async function showCart() {
     };
 
     div.querySelector(".remove").onclick = async () => {
-      // direct remove (no confirm/prompt)
       await deleteDoc(`cart/${item.cartDocId}`, idToken);
       div.remove();
       const idx = cartItems.indexOf(item);
@@ -365,7 +351,6 @@ async function showCart() {
   createCartSummaryInside(grid, cartItems);
 }
 
-// address and payment flow (same structure as before but using showMessage)
 async function showAddressPage(subtotal) {
   let sess;
   try { sess = getSessionOrThrow(); } catch (e) { return; }
@@ -472,7 +457,6 @@ async function saveAddress(uid, idToken, subtotal) {
   showAddressPage(subtotal);
 }
 
-// finalize order: create order + reduce stock + clear cart
 async function finalizeOrderFromPayment(paymentId) {
   let sess;
   try { sess = getSessionOrThrow(); } catch (e) { return; }
@@ -554,12 +538,70 @@ async function finalizeOrderFromPayment(paymentId) {
       body: JSON.stringify(updateBody),
     });
   }
+ //USER BILL
+async function showOrderBill(orderId) {
+  const grid = document.getElementById("productGrid");
+  grid.innerHTML = "<h2>Generating bill...</h2>";
+
+  let sess;
+  try { sess = getSessionOrThrow(); } catch (e) { return; }
+  const { idToken } = sess;
+
+  try {
+    const res = await fetch(`${FIRESTORE_BASE}/orders/${orderId}`, {
+      headers: authHeader(idToken)
+    });
+    const order = await res.json();
+    const f = order.fields || {};
+    const items = f.items?.arrayValue?.values || [];
+
+    let html = `
+      <div class="bill-container">
+        <h2>🧾 Order Bill</h2>
+        <p><strong>Order ID:</strong> ${f.orderId?.stringValue || "N/A"}</p>
+        <p><strong>Date:</strong> ${new Date(f.createdAt?.timestampValue).toLocaleString()}</p>
+        <p><strong>Payment Mode:</strong> ${f.mode?.stringValue || "N/A"}</p>
+        <p><strong>Status:</strong> ${f.status?.stringValue || "N/A"}</p>
+        <hr>
+        <h3>Items</h3>
+        <table border="1" cellspacing="0" cellpadding="6">
+          <tr><th>Product</th><th>Price</th><th>Qty</th><th>Total</th></tr>
+    `;
+
+    let grandTotal = 0;
+    items.forEach(it => {
+      const fields = it.mapValue.fields;
+      const name = fields.name?.stringValue || "Unnamed";
+      const price = parseFloat(fields.price?.doubleValue || fields.price?.integerValue || 0);
+      const qty = parseInt(fields.quantity?.integerValue || 1, 10);
+      const total = price * qty;
+      grandTotal += total;
+      html += `<tr><td>${name}</td><td>₹${price}</td><td>${qty}</td><td>₹${total}</td></tr>`;
+    });
+
+    html += `
+        </table>
+        <h3 style="text-align:right;">Subtotal: ₹${f.subtotal?.doubleValue || f.subtotal?.integerValue || grandTotal}</h3>
+        <p style="text-align:center; color:green; margin-top:10px;">✅ Order placed successfully! Your order will be delivered shortly.</p>
+        <div style="text-align:center; margin-top:20px;">
+          <button onclick="showHome()">Back to Home</button>
+        </div>
+      </div>
+    `;
+
+    grid.innerHTML = html;
+  } catch (err) {
+    console.error("Bill load failed:", err);
+    showMessage("Failed to generate bill", "#b22222");
+  }
+}
 
   // clear cart
   await clearUserCart(uid, idToken);
 
   showMessage("✅ Order placed successfully!", "green");
-  await showHome();
+await showOrderBill(orderId);
+
 }
 
 // Clear user cart
@@ -687,7 +729,7 @@ async function showWishlist() {
   renderCategories(categories, subcategories, allProducts);
 }
 
-// payment page & simple flow
+// payment page
 async function showPaymentPage(subtotal) {
   let sess;
   try { sess = getSessionOrThrow(); } catch (e) { return; }
@@ -737,13 +779,10 @@ async function showPaymentPage(subtotal) {
       method: { stringValue: mode },
       timestamp: { timestampValue: new Date().toISOString() }
     });
-
-    // finalize (create order with items, reduce stock, clear cart)
     await finalizeOrderFromPayment(paymentId);
   };
 }
 
-// PAGE INIT wiring
 document.addEventListener("DOMContentLoaded", () => {
   const cartBtn = document.getElementById("cartBtn");
   const wishBtn = document.getElementById("wishlistBtn");
@@ -757,15 +796,11 @@ document.addEventListener("DOMContentLoaded", () => {
     showMessage("Logged out", "#0b486b");
   };
 });
-/***************************************************
- * ADMIN SECTION
- ***************************************************/
+ //ADMIN SECTION
 function setupAdminSidebar() {
-  // Attach click events safely (works after reload of content)
   const sidebar = document.getElementById("adminSidebar");
   if (!sidebar) return;
 
-  // Use event delegation (clicks bubble up)
   sidebar.onclick = (e) => {
     const target = e.target.closest("button");
     if (!target) return;
@@ -783,15 +818,10 @@ function setupAdminSidebar() {
     }
   };
 
-  // Logout stays separate (not part of sidebar)
   const logoutBtn = document.getElementById("adminLogoutBtn");
   if (logoutBtn) logoutBtn.onclick = logout;
 }
-
-
-/***************************************************
- * MANAGE PRODUCTS — Predefined Categories
- ***************************************************/
+ //MANAGE PRODUCTS — ADD / EDIT WITH IMAGE PREVIEW
 async function loadAdminProducts() {
   const main = document.getElementById("adminMain");
   main.innerHTML = `
@@ -805,7 +835,7 @@ async function loadAdminProducts() {
   const products = await getCollection("products");
   renderProductList(products);
 
-  document.getElementById("addProductBtn").onclick = showAddProductForm;
+  document.getElementById("addProductBtn").onclick = () => showAddOrEditProductForm();
 }
 
 function renderProductList(products = []) {
@@ -818,11 +848,20 @@ function renderProductList(products = []) {
   let html = "";
   products.forEach(p => {
     const f = p.fields;
+    const pid = p.name.split("/").pop();
+    const img = f?.image?.stringValue || "https://placehold.co/100x100?text=No+Image";
     html += `
       <div class="product-row">
-        <strong>${f?.name?.stringValue}</strong> — ₹${f?.price?.doubleValue || f?.price?.integerValue}
-        <span class="cat">${f?.category?.stringValue || "Uncategorized"} › ${f?.subcategory?.stringValue || "-"}</span>
-        <button class="delBtn" data-id="${p.name}">🗑️</button>
+        <img src="${img}" alt="${f?.name?.stringValue}" class="thumb">
+        <div class="info">
+          <strong>${f?.name?.stringValue}</strong><br>
+          ₹${f?.price?.doubleValue || f?.price?.integerValue} <br>
+          <small>${f?.category?.stringValue} › ${f?.subcategory?.stringValue}</small>
+        </div>
+        <div class="actions">
+          <button class="editBtn" data-id="${pid}">✏️ Edit</button>
+          <button class="delBtn" data-id="${pid}">🗑️ Delete</button>
+        </div>
       </div>
     `;
   });
@@ -831,28 +870,48 @@ function renderProductList(products = []) {
   list.querySelectorAll(".delBtn").forEach(btn => {
     btn.onclick = async () => {
       if (confirm("Delete this product?")) {
-        await deleteDoc(btn.dataset.id);
+        await deleteDoc(`products/${btn.dataset.id}`);
         loadAdminProducts();
       }
     };
   });
+
+  list.querySelectorAll(".editBtn").forEach(btn => {
+    btn.onclick = async () => {
+      const pid = btn.dataset.id;
+      const product = await getDoc(`products/${pid}`);
+      showAddOrEditProductForm(pid, product.fields);
+    };
+  });
 }
 
-function showAddProductForm() {
+function showAddOrEditProductForm(productId = null, fields = null) {
   const main = document.getElementById("adminMain");
+  const isEdit = !!productId;
+
+  const name = fields?.name?.stringValue || "";
+  const price = fields?.price?.doubleValue || fields?.price?.integerValue || "";
+  const category = fields?.category?.stringValue || "";
+  const subcategory = fields?.subcategory?.stringValue || "";
+  const stock = fields?.stock?.integerValue || "";
+  const image = fields?.image?.stringValue || "";
+
   main.innerHTML = `
     <div class="add-product">
-      <h2>➕ Add Product</h2>
+      <h2>${isEdit ? "✏️ Edit Product" : "➕ Add Product"}</h2>
+
       <label>Name</label>
-      <input id="prodName" type="text" placeholder="Product name">
+      <input id="prodName" type="text" value="${name}" placeholder="Product name">
 
       <label>Price (₹)</label>
-      <input id="prodPrice" type="number" placeholder="Enter price">
+      <input id="prodPrice" type="number" value="${price}" placeholder="Enter price">
 
       <label>Category</label>
       <select id="prodCategory">
         <option value="">Select category</option>
-        ${Object.keys(CATEGORIES).map(c => `<option value="${c}">${c}</option>`).join("")}
+        ${Object.keys(CATEGORIES)
+          .map(c => `<option value="${c}" ${c === category ? "selected" : ""}>${c}</option>`)
+          .join("")}
       </select>
 
       <label>Subcategory</label>
@@ -861,18 +920,29 @@ function showAddProductForm() {
       </select>
 
       <label>Stock</label>
-      <input id="prodStock" type="number" placeholder="Stock quantity">
+      <input id="prodStock" type="number" value="${stock}" placeholder="Stock quantity">
+
+      <label>Image URL</label>
+      <input id="prodImage" type="text" value="${image}" placeholder="Paste image URL">
+      <div id="imgPreview" class="img-preview">
+        ${image ? `<img src="${image}" alt="Preview">` : "<p>No image yet</p>"}
+      </div>
 
       <div class="btn-row">
-        <button id="saveProductBtn" class="primary-btn">Save</button>
+        <button id="saveProductBtn" class="primary-btn">${isEdit ? "Update" : "Save"}</button>
         <button id="cancelBtn">Cancel</button>
       </div>
     </div>
   `;
 
+  // Subcategories dynamic
   const catSel = document.getElementById("prodCategory");
   const subSel = document.getElementById("prodSubcategory");
-
+  if (category && CATEGORIES[category]) {
+    subSel.innerHTML += CATEGORIES[category]
+      .map(s => `<option value="${s}" ${s === subcategory ? "selected" : ""}>${s}</option>`)
+      .join("");
+  }
   catSel.onchange = () => {
     const selected = catSel.value;
     subSel.innerHTML = `<option value="">Select subcategory</option>`;
@@ -883,39 +953,50 @@ function showAddProductForm() {
     }
   };
 
-  document.getElementById("cancelBtn").onclick = loadAdminProducts;
-  document.getElementById("saveProductBtn").onclick = async () => {
-    const name = document.getElementById("prodName").value.trim();
-    const price = parseFloat(document.getElementById("prodPrice").value);
-    const category = document.getElementById("prodCategory").value;
-    const subcategory = document.getElementById("prodSubcategory").value;
-    const stock = parseInt(document.getElementById("prodStock").value);
+  // Live image preview
+  const imgInput = document.getElementById("prodImage");
+  const preview = document.getElementById("imgPreview");
+  imgInput.addEventListener("input", () => {
+    const url = imgInput.value.trim();
+    if (url) preview.innerHTML = `<img src="${url}" alt="Preview">`;
+    else preview.innerHTML = "<p>No image yet</p>";
+  });
 
-    if (!name || !price || !category || !subcategory) {
+  // Save logic
+  document.getElementById("saveProductBtn").onclick = async () => {
+    const nameVal = document.getElementById("prodName").value.trim();
+    const priceVal = parseFloat(document.getElementById("prodPrice").value);
+    const catVal = document.getElementById("prodCategory").value;
+    const subVal = document.getElementById("prodSubcategory").value;
+    const stockVal = parseInt(document.getElementById("prodStock").value);
+    const imageVal = document.getElementById("prodImage").value.trim();
+
+    if (!nameVal || !priceVal || !catVal || !subVal) {
       alert("⚠️ Please fill all required fields");
       return;
     }
 
-    const productId = name.toLowerCase().replace(/\s+/g, "_");
-    await createOrUpdateDoc(`products/${productId}`, {
+    const pid = productId || nameVal.toLowerCase().replace(/\s+/g, "_");
+
+    await createOrUpdateDoc(`products/${pid}`, {
       fields: {
-        name: { stringValue: name },
-        price: { doubleValue: price },
-        category: { stringValue: category },
-        subcategory: { stringValue: subcategory },
-        stock: { integerValue: stock },
+        name: { stringValue: nameVal },
+        price: { doubleValue: priceVal },
+        category: { stringValue: catVal },
+        subcategory: { stringValue: subVal },
+        stock: { integerValue: stockVal },
+        image: { stringValue: imageVal || "https://placehold.co/200x200?text=No+Image" },
         createdAt: { timestampValue: new Date().toISOString() }
       }
     });
 
-    alert("✅ Product saved successfully!");
+    alert(isEdit ? "✅ Product updated!" : "✅ Product added!");
     loadAdminProducts();
   };
-}
 
-/***************************************************
- * CUSTOMER CREDIT + REPORTS
- ***************************************************/
+  document.getElementById("cancelBtn").onclick = loadAdminProducts;
+}
+//CUSTOMER CREDIT + REPORTS
 async function loadCustomerCredits() {
   const adminMain = document.getElementById("adminMain");
   adminMain.innerHTML = "<h2>💳 Customer Credit</h2><p>Loading...</p>";
@@ -957,9 +1038,7 @@ async function loadCustomerCredits() {
   });
 }
 
-/***************************************************
- * ADVANCED ADMIN REPORTS (Sales / Customer / Inventory)
- ***************************************************/
+ // ADMIN REPORTS (Sales / Customer / Inventory)
 async function loadAdminReports() {
   const main = document.getElementById("adminMain");
   main.innerHTML = `
@@ -1011,7 +1090,6 @@ async function loadAdminReports() {
     </div>
   `;
 
-  // (Same logic from your last version — untouched)
   document.getElementById("filterSalesBtn").onclick = async () => {
     const from = new Date(document.getElementById("salesFrom").value);
     const to = new Date(document.getElementById("salesTo").value);
@@ -1053,7 +1131,7 @@ async function loadAdminReports() {
     box.innerHTML = html;
   };
 
-  /**************** CUSTOMER REPORT ****************/
+  //CUSTOMER REPORT 
   document.getElementById("filterCustBtn").onclick = async () => {
     const from = new Date(document.getElementById("custFrom").value);
     const to = new Date(document.getElementById("custTo").value);
@@ -1106,7 +1184,7 @@ async function loadAdminReports() {
     box.innerHTML = html;
   };
 
-  /**************** INVENTORY REPORT ****************/
+  //INVENTORY REPORT
   document.getElementById("filterInvBtn").onclick = async () => {
     const type = document.getElementById("invType").value;
     const box = document.getElementById("invResults");
@@ -1137,9 +1215,7 @@ async function loadAdminReports() {
   };
 }
 
-/***************************************************
- * LOGOUT + DOM EVENTS
- ***************************************************/
+ //LOGOUT 
 function logout() {
   SESSION.email = null;
   SESSION.idToken = null;
@@ -1149,28 +1225,35 @@ function logout() {
   document.getElementById("authContainer")?.classList.remove("hidden");
   showMessage("Logged out successfully.", "#0b486b");
 }
-// 🔧 Fix: define renderCategories so Cart can load safely
-function renderCategories(categories = []) {
-  const categoryListEl = document.getElementById("categoryList");
-  if (!categoryListEl) return;
 
-  // clear existing
-  categoryListEl.innerHTML = "";
+function renderCategories(categories = [], subcategories = [], products = []) {
+  const sidebar = document.getElementById("sidebar");
+  if (!sidebar) return;
 
-  // "All Products"
-  const allLi = document.createElement("li");
-  allLi.textContent = "All Products";
-  allLi.onclick = () => loadProducts();
-  categoryListEl.appendChild(allLi);
+  let html = `<h3>Categories</h3>
+              <a href="#" onclick="loadProducts('All Products')">All Products</a>`;
 
-  // render each category
-  categories.forEach((cat) => {
-    const li = document.createElement("li");
-    li.textContent = cat.name;
-    li.onclick = () => loadProducts(cat.name);
-    categoryListEl.appendChild(li);
+  (categories || []).forEach(c => {
+    const name = c.fields?.name?.stringValue || "Unnamed";
+    const subcats = (subcategories || [])
+      .filter(s => s.fields?.category?.stringValue === name)
+      .map(s => s.fields?.name?.stringValue);
+
+    html += `<div class="category-block">
+               <a href="#" onclick="loadProducts('${name}')">${name}</a>`;
+    if (subcats.length) {
+      html += `<div class="subcategory-list">`;
+      subcats.forEach(sub => {
+        html += `<a href="#" onclick="loadProducts('${name}', '${sub}')">${sub}</a>`;
+      });
+      html += `</div>`;
+    }
+    html += `</div>`;
   });
+
+  sidebar.innerHTML = html;
 }
+
 
 document.addEventListener("DOMContentLoaded", () => {
   const cartBtn = document.getElementById("cartBtn");
@@ -1180,3 +1263,63 @@ document.addEventListener("DOMContentLoaded", () => {
   if (wishBtn) wishBtn.onclick = showWishlist;
   if (logoutBtn) logoutBtn.onclick = logout;
 });
+
+//BILL GENERATION
+async function showOrderSuccess(orderId) {
+  const grid = document.getElementById("productGrid");
+  if (!grid) return;
+
+  const orderDoc = await getDoc(`orders/${orderId}`);
+  if (!orderDoc) {
+    grid.innerHTML = `<p>Order not found!</p>`;
+    return;
+  }
+
+  const f = orderDoc.fields || {};
+  const products = f.items?.arrayValue?.values || [];
+  const method = f.paymentMethod?.stringValue || "Unknown";
+  const total = f.totalAmount?.doubleValue || f.totalAmount?.integerValue || 0;
+  const date = new Date(f.createdAt?.timestampValue || Date.now()).toLocaleString();
+
+  let billHTML = `
+    <div class="bill-container">
+      <h2>🧾 Order Successful!</h2>
+      <p>Thank you for shopping with <b>NR-Stores</b>.</p>
+      <p>Your order <b>${orderId}</b> was placed successfully.</p>
+      <p><b>Payment Method:</b> ${method}</p>
+      <p><b>Date:</b> ${date}</p>
+
+      <table border="1" cellpadding="6" cellspacing="0" style="margin-top:10px;width:100%;">
+        <tr>
+          <th>Product</th>
+          <th>Qty</th>
+          <th>Price (₹)</th>
+          <th>Subtotal (₹)</th>
+        </tr>
+  `;
+
+  let grandTotal = 0;
+
+  products.forEach(p => {
+    const pf = p.mapValue.fields;
+    const name = pf.name?.stringValue || "Unknown";
+    const qty = parseInt(pf.quantity?.integerValue || 1, 10);
+    const price = parseFloat(pf.price?.doubleValue || pf.price?.integerValue || 0);
+    const sub = qty * price;
+    grandTotal += sub;
+    billHTML += `<tr><td>${name}</td><td>${qty}</td><td>${price}</td><td>${sub}</td></tr>`;
+  });
+
+  billHTML += `
+        <tr><td colspan="3" align="right"><b>Total</b></td><td><b>₹${grandTotal}</b></td></tr>
+      </table>
+
+      <p style="margin-top:20px;color:green;"><b>Your order will be delivered shortly.</b></p>
+      <button id="backToHomeBtn">Continue Shopping</button>
+    </div>
+  `;
+
+  grid.innerHTML = billHTML;
+
+  document.getElementById("backToHomeBtn").onclick = showHome;
+}

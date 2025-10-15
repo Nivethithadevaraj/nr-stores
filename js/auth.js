@@ -1,4 +1,4 @@
-/* ---------------------- SIGNUP ---------------------- */
+//SIGNUP
 async function signupUser(email, password, name) {
   try {
     const res = await fetch(
@@ -35,8 +35,7 @@ async function signupUser(email, password, name) {
     showMessage("Signup failed. Try again.", "#b22222");
   }
 }
-
-/* ---------------------- LOGIN ---------------------- */
+//LOGIN
 async function loginUser(email, password) {
   try {
     const res = await fetch(
@@ -67,12 +66,11 @@ async function loginUser(email, password) {
     showMessage("✅ Login successful!", "green");
 
     if (role === "admin") {
-  document.getElementById("authContainer").classList.add("hidden");
-  document.getElementById("userDashboard").classList.add("hidden");
-  document.getElementById("adminDashboard").classList.remove("hidden");
-  setupAdminSidebar();
-}
-else {
+      document.getElementById("authContainer").classList.add("hidden");
+      document.getElementById("userDashboard").classList.add("hidden");
+      document.getElementById("adminDashboard").classList.remove("hidden");
+      setupAdminSidebar();
+    } else {
       onLoginSuccess(loginData);
     }
   } catch (err) {
@@ -80,25 +78,19 @@ else {
     showMessage("Invalid credentials. Try again.", "#b22222");
   }
 }
-
-/******************************************************
- * GOOGLE SIGN-IN (Popup + Firebase REST)
- ******************************************************/
+//GOOGLE
 async function googleLogin() {
   showMessage("⏳ Redirecting to Google...");
 
   const CLIENT_ID =
     "857786713179-q8qk8g7bonk9tvpi5ahj6pcqu3hs8mun.apps.googleusercontent.com";
-  const REDIRECT_URI = "http://127.0.0.1:5500/"; // Must match OAuth2 setup
-
-  // Step 1️⃣: Open Google OAuth popup
+  const REDIRECT_URI = "http://127.0.0.1:5500/"; 
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
     REDIRECT_URI
   )}&response_type=token&scope=email%20profile&include_granted_scopes=true`;
 
   const popup = window.open(authUrl, "googleLogin", "width=500,height=600");
 
-  // Step 2️⃣: Wait for popup redirect with token
   const pollTimer = setInterval(async function () {
     try {
       if (popup.location.hash) {
@@ -110,7 +102,6 @@ async function googleLogin() {
 
         if (!accessToken) throw new Error("No access token found.");
 
-        // Step 3️⃣: Exchange Google access token for Firebase ID token
         const res = await fetch(
           `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${API_KEY}`,
           {
@@ -130,10 +121,9 @@ async function googleLogin() {
 
         const idToken = data.idToken;
         const decoded = parseJwt(idToken);
-        const uid = decoded ? decoded.user_id : null;
         const email = data.email || decoded?.email;
+        const uid = email.replace(/[@.]/g, "_");
 
-        // Step 4️⃣: Create user in Firestore if new
         const firestoreUrl = `${FIRESTORE_BASE}/users/${uid}`;
         const docBody = {
           fields: {
@@ -156,7 +146,6 @@ async function googleLogin() {
 
         showMessage(`✅ Logged in as ${email}`, "green");
 
-        // Step 5️⃣: Handle session and UI
         setSessionFromLoginData({
           email,
           idToken,
@@ -165,13 +154,11 @@ async function googleLogin() {
 
         onLoginSuccess(data);
       }
-    } catch (err) {
-      // Ignore CORS until redirect completes
+    } catch {
     }
   }, 500);
 }
 
-/* ---------------------- JWT Decode ---------------------- */
 function parseJwt(token) {
   try {
     const base64 = token.split(".")[1];
@@ -187,9 +174,6 @@ function parseJwt(token) {
   }
 }
 
-/******************************************************
- * EVENT HANDLERS
- ******************************************************/
 document.addEventListener("DOMContentLoaded", () => {
   const loginBtn = document.getElementById("loginBtn");
   const signupBtn = document.getElementById("signupBtn");
@@ -233,13 +217,20 @@ document.addEventListener("DOMContentLoaded", () => {
   if (googleBtn) googleBtn.addEventListener("click", googleLogin);
 });
 
-/* Allow pressing Enter key to submit form */
 document.addEventListener("keydown", function (e) {
   if (e.key === "Enter") {
     const signupVisible = !document
       .getElementById("signupForm")
       .classList.contains("hidden");
-    if (signupVisible) signupUser();
-    else loginUser();
+    if (signupVisible) {
+      const name = document.getElementById("signupName")?.value.trim();
+      const email = document.getElementById("signupEmail")?.value.trim();
+      const password = document.getElementById("signupPassword")?.value.trim();
+      signupUser(email, password, name);
+    } else {
+      const email = document.getElementById("loginEmail")?.value.trim();
+      const password = document.getElementById("loginPassword")?.value.trim();
+      loginUser(email, password);
+    }
   }
 });

@@ -1,6 +1,3 @@
-// firestore.js - Firestore REST helper functions (used by ui and admin)
-// All functions expect idToken where needed; they return JSON where applicable.
-
 async function getCollection(collectionName) {
   const res = await fetch(`${FIRESTORE_BASE}/${collectionName}`);
   if (!res.ok) {
@@ -12,14 +9,12 @@ async function getCollection(collectionName) {
 }
 
 async function getDoc(path) {
-  // path like "products/prod_tshirt" (no leading slash)
   const res = await fetch(`${FIRESTORE_BASE}/${path}`);
   if (!res.ok) return null;
   return await res.json();
 }
 
 async function addToCollection(collectionName, docId, idToken, fields) {
-  // fields is already the Firestore 'fields' object (e.g. { name: { stringValue: "x" } })
   const res = await fetch(`${FIRESTORE_BASE}/${collectionName}/${docId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...authHeader(idToken) },
@@ -33,7 +28,6 @@ async function addToCollection(collectionName, docId, idToken, fields) {
 }
 
 async function updateDoc(path, fields, idToken) {
-  // PATCH with updateMask for safety; if caller wants full fields pass all keys
   const res = await fetch(`${FIRESTORE_BASE}/${path}?updateMask.fieldPaths=*`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json", ...authHeader(idToken) },
@@ -58,7 +52,6 @@ async function deleteDoc(path, idToken) {
   return res;
 }
 
-// helper: save user (used on signup)
 async function saveUser(uid, idToken, name, email, role = "user", provider = "password") {
   const body = {
     fields: {
@@ -85,7 +78,6 @@ async function getUser(uid, idToken) {
   return await res.json();
 }
 
-// upsert cart item (increment if exists)
 async function upsertCartItem(collection, docId, idToken, productId, userId, increment = 1) {
   const existing = await getDoc(`${collection}/${docId}`);
   if (existing && existing.fields && existing.fields.quantity) {

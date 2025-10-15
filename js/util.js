@@ -1,11 +1,8 @@
-// util.js - small helpers, REST constants
 const API_KEY = "AIzaSyB347uYD52SUnWcUrtjBGbNv4RkNELD2zU";
-const PROJECT_ID = "nr-stores";              // your Firebase project ID
+const PROJECT_ID = "nr-stores";             
 
-// Firestore REST base
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents`;
 
-// Show inline messages instead of alert()
 function showMessage(msg, color = "green") {
   const el = document.getElementById("message");
   if (!el) return;
@@ -14,9 +11,6 @@ function showMessage(msg, color = "green") {
   el.innerText = msg;
   setTimeout(() => (el.innerText = ""), 4000);
 }
-/***************************************************
- * CREATE OR UPDATE DOC (for admin products etc)
- ***************************************************/
 async function createOrUpdateDoc(docPath, body) {
   const token = SESSION.idToken;
   if (!token) {
